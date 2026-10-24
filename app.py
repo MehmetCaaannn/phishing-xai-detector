@@ -19,7 +19,7 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# 1. DİNAMİK RİSK & XAI HESAPLAMA MOTORU
+# 1. HİBRİT RİSK & XAI HESAPLAMA MOTORU (HAVUZ + DNS/IP + XAI)
 # ---------------------------------------------------------
 def calculate_shannon_entropy(text):
     """URL metninin rastgelelik / entropi skorunu hesaplar."""
@@ -31,37 +31,73 @@ def calculate_shannon_entropy(text):
         entropy -= p_x * math.log(p_x, 2)
     return round(entropy, 2)
 
-def calculate_url_risk(url):
+def calculate_hybrid_url_risk(url):
     """
-    URL özniteliklerine, Homograph saldırılarına ve marka taklitlerine dayalı risk puanlama motoru.
+    1. Katman: Güvenilir Domain Havuzu (Whitelist)
+    2. Katman: Canlı DNS / IP Çözümleme Varlık Kontrolü
+    3. Katman: Sezgisel (Heuristic) & Homograph & Marka Taklidi Analizi
     """
-    url_lower = url.lower()
-    parsed = urllib.parse.urlparse(url)
+    url_lower = url.lower().strip()
+    parsed = urllib.parse.urlparse(url_lower if url_lower.startswith(('http://', 'https://')) else f'http://{url_lower}')
     hostname = parsed.netloc or parsed.path
-    hostname_clean = hostname.split(':')[0]
-    
-    score = 12.0  # Temel başlangıç puanı
+    hostname_clean = hostname.split(':')[0].replace("www.", "")
+
+    # -----------------------------------------------------
+    # 🟢 1. KATMAN: GÜVENİLİR DOMAİN HAVUZU (WHITELIST)
+    # -----------------------------------------------------
+    trusted_whitelist = [
+        "turkiye.gov.tr", "e-devlet.gov.tr", "ahmetyesevi.edu.tr",
+        "google.com", "github.com", "amazon.com", "garantibbva.com.tr",
+        "ziraatbank.com.tr", "isbank.com.tr", "akbank.com", "vakifbank.com.tr",
+        "youtube.com", "microsoft.com", "wikipedia.org", "e-devlet.gov.tr"
+    ]
+
+    # Tam eşleşme veya resmi kamu/üniversite uzantısı kontrolü
+    if hostname_clean in trusted_whitelist or hostname_clean.endswith(".gov.tr") or hostname_clean.endswith(".edu.tr"):
+        if "xn--" not in hostname_clean:
+            return 5.0, [("✅ **Onaylı Güvenilir Havuz Kaydı (Whitelist)**", "Sistem tarafından doğrulanmış kurumsal/resmi alan adı.")]
+
+    # -----------------------------------------------------
+    # 🟡 2. KATMAN: CANLI DNS / IP ÇÖZÜMLEME VARLIK KONTROLÜ
+    # -----------------------------------------------------
+    resolved_ip = None
+    try:
+        resolved_ip = socket.gethostbyname(hostname_clean)
+    except Exception:
+        resolved_ip = None
+
+    if not resolved_ip:
+        # İnternette aktif IP kaydı olmayan sahte/rastgele domainler (Örn: xx.org)
+        return 92.5, [
+            ("🚨 **Aktif DNS / IP Kaydı Bulunamadı**", f"`{hostname_clean}` domainine ait aktif bir IP adresi çözümlenemedi. **Geçersiz, Pasif veya Şüpheli Alan Adı!**"),
+            ("❌ **Bilinmeyen / Yanıltıcı Domain Yapısı**", "İnternet üzerinde aktif sunucu karşılığı olmayan adresler yüksek risk taşır.")
+        ]
+
+    # -----------------------------------------------------
+    # 🔴 3. KATMAN: SEZGİSEL (HEURISTIC) & MARKA TAKLİDİ ANALİZİ
+    # -----------------------------------------------------
+    score = 15.0  # Varsayılan başlangıç puanı
     explanations = []
 
-    # 🛑 0. MARKA / KURUM TAKLİDİ (TYPOSQUATTING) KONTROLÜ
+    explanations.append((f"🌐 **Aktif IP Adresi Doğrulandı ({resolved_ip})**", "Domain internet üzerinde aktif bir IP adresine yönleniyor."))
+
+    # Marka / Kamu Kurumu Taklidi (Typosquatting)
     critical_brands = ['turkiye', 'edevlet', 'e-devlet', 'garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank', 'gib', 'mhrs']
     for brand in critical_brands:
         if brand in hostname_clean:
-            # Kamu markası ama resmi .gov.tr değilse -> Yüksek Risk!
             if brand in ['turkiye', 'edevlet', 'e-devlet', 'gib', 'mhrs'] and not hostname_clean.endswith(".gov.tr"):
                 score += 55.0
                 explanations.append((f"🚨 **Marka/Kamu Kurumu Taklidi ({brand})**", f"URL resmi kamu uzantısı (.gov.tr) taşımıyor! **Sahte/Taklit Domain Riski!**"))
-            # Banka markası ama resmi domaini değilse
             elif brand in ['garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank'] and not any(hostname_clean.endswith(ok) for ok in [f"{brand}.com.tr", f"{brand}bbva.com.tr", f"{brand}.com"]):
                 score += 50.0
                 explanations.append((f"🚨 **Banka/Kurum Taklidi ({brand})**", f"URL resmi banka domain yapısıyla eşleşmiyor. **Phishing Riski!**"))
 
-    # 🛑 1. HOMOGRAPH / PUNYCODE KONTROLÜ (FARKLI ALFABE KULLANIMI)
+    # Homograph / Punycode (Farklı Alfabe Kullanımı)
     if "xn--" in hostname_clean or "xn--" in url_lower:
         score += 50.0
         explanations.append(("🚨 **Homograph (Eş Yazımlı Alfabesi Saldırısı / Punycode)**", "URL'de gizli/farklı alfabe karakterleri (Örn: Kiril alfabesi 'а') tespit edildi. **Yüksek Phishing Riski!**"))
 
-    # 2. HTTP / HTTPS Kontrolü
+    # HTTP / HTTPS Kontrolü
     if url_lower.startswith("http://"):
         score += 15.0
         explanations.append(("❌ **Güvensiz Protokol (HTTP)**", "Şifrelenmemiş bağlantı kullanımı riski **artıran** faktör."))
@@ -69,7 +105,7 @@ def calculate_url_risk(url):
         score -= 5.0
         explanations.append(("✅ **Güvenli Protokol (HTTPS)**", "Güvenilirliği **destekleyen** faktör."))
 
-    # 3. Şüpheli TLD Uzantıları
+    # Şüpheli TLD Uzantıları
     suspicious_tlds = ['.top', '.xyz', '.info', '.site', '.online', '.club', '.tk', '.ml', '.ga', '.cf', '.gq', '.verify.net', '.zip']
     has_bad_tld = any(hostname_clean.endswith(tld) or (tld + "/") in url_lower for tld in suspicious_tlds)
     if has_bad_tld:
@@ -78,48 +114,36 @@ def calculate_url_risk(url):
     else:
         explanations.append(("✅ **Standart TLD Uzantısı**", "Güvenilirliği **destekleyen** faktör."))
 
-    # 4. Phishing Kelime Analizi
+    # Phishing Kelime Analizi
     phish_keywords = ['login', 'verify', 'account', 'banking', 'aidat', 'sorgulama', 'iade', 'guncelleme', 'security', 'secure', 'paypaal', 'auth', 'update']
     matched = [kw for kw in phish_keywords if kw in url_lower]
-    
-    trusted_domains = [".gov.tr", "google.com", "garantibbva.com.tr", "github.com", "ahmetyesevi.edu.tr", "amazon.com"]
-    is_trusted = any(td in url_lower for td in trusted_domains) and "xn--" not in url_lower
-
-    if matched and not is_trusted:
+    if matched:
         score += len(matched) * 14.2
         explanations.append((f"❌ **Şüpheli Kelime Dizesi ({', '.join(matched)})**", "Zararlı olma riskini **artıran** faktör."))
 
-    # 5. Doğrudan IP Adresi Kullanımı
+    # Doğrudan IP Adresi Kullanımı
     ip_pattern = r'https?://(?:\d{1,3}\.){3}\d{1,3}'
     if re.search(ip_pattern, url_lower):
         score += 42.0
         explanations.append(("❌ **Doğrudan IP Adresi Kullanımı**", "Zararlı olma riskini **çok yüksek oranda artıran** faktör."))
 
-    # 6. Tire (-), At (@) Sayısı
+    # Tire (-) ve At (@) Sayısı
     dash_count = url_lower.count('-')
     if dash_count > 2:
         score += dash_count * 4.5
         explanations.append((f"❌ **Yüksek Tire (-) Sayısı ({dash_count})**", "Zararlı olma riskini **artıran** faktör."))
-    else:
-        explanations.append((f"✅ **Tire (-) Sayısı ({dash_count})**", "Güvenilirliği **destekleyen** faktör."))
 
     if "@" in url_lower:
         score += 25.0
         explanations.append(("❌ **@ İşareti Kullanımı**", "Kullanıcıyı yanıltma riskini **artıran** faktör."))
 
-    # 7. Metin Entropisi (Karakter Karmaşıklığı)
+    # Metin Entropisi (Karakter Karmaşıklığı)
     entropy = calculate_shannon_entropy(hostname_clean)
     if entropy > 4.2:
         score += 18.0
         explanations.append((f"❌ **Yüksek Karmaşıklık / Entropi Skor Skalası ({entropy})**", "Rastgele üretilmiş alan adı riskini **artıran** faktör."))
 
-    # 8. Kamu / Üniversite Özel İndirimi
-    if (".gov.tr" in url_lower or ".edu.tr" in url_lower) and "xn--" not in url_lower:
-        score = 8.4
-        explanations = [("✅ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem tarafından onaylanmış yüksek güvenilirlik faktörü.")]
-
-    # Skoru %4.5 ile %98.8 arasında dinamik sınırla
-    final_score = round(min(max(score, 4.5), 98.8), 1)
+    final_score = round(min(max(score, 5.0), 98.8), 1)
     return final_score, explanations
 
 
@@ -141,8 +165,9 @@ with tab1:
     if analyze_btn and input_url:
         st.subheader("📊 Analiz Çıktısı")
         
-        # Dinamik Risk Skoru Hesabı
-        risk_score, xai_reasons = calculate_url_risk(input_url)
+        # Hibrit Risk Analizi Hesabı (Whitelist -> DNS -> Feature Matrix)
+        with st.spinner("URL güvenlik havuzu, DNS ve öznitelikler sorgulanıyor..."):
+            risk_score, xai_reasons = calculate_hybrid_url_risk(input_url)
         
         col_score, col_status = st.columns([1, 2])
         
