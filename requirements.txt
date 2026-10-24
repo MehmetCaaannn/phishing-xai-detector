@@ -1,0 +1,12 @@
+streamlit
+pandas
+numpy
+scikit-learn
+xgboost
+lightgbm
+shap
+matplotlib
+seaborn
+python-whois
+tldextract
+requests
