@@ -23,12 +23,12 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# Session State İle Canlı URL Analiz Hafızası
+# Session State İle Canlı URL Analiz Hafızası (Sıfır Başlangıç)
 # ---------------------------------------------------------
 if 'last_analyzed_url' not in st.session_state:
-    st.session_state['last_analyzed_url'] = "https://www.turkiye.gov.tr/"
+    st.session_state['last_analyzed_url'] = ""
 if 'last_risk_score' not in st.session_state:
-    st.session_state['last_risk_score'] = 4.2
+    st.session_state['last_risk_score'] = None
 if 'last_shap_values' not in st.session_state:
     st.session_state['last_shap_values'] = None
 
@@ -197,7 +197,6 @@ def calculate_dynamic_url_risk(url, meta):
     entropy = calculate_shannon_entropy(hostname_clean)
     micro_offset = round(((url_len % 7) * 0.3) + ((entropy * 10) % 1.5), 1)
 
-    # Canlı SHAP Öznitelik Katkı Haritası (Local SHAP Dictionary)
     local_shap = {
         'DNS IP Varlık Durumu': -0.05,
         'Punycode / Homograph': -0.02,
@@ -309,9 +308,9 @@ with tab1:
     st.subheader("URL Sorgulama ve Anlık Risk Değerlendirmesi")
     
     input_url = st.text_input(
-        "Analiz edilecek URL adresini giriniz:",
+        "Analiz Edilecek URL Adresini Giriniz:",
         value=st.session_state['last_analyzed_url'],
-        placeholder="https://www.turkiye.gov.tr/"
+        placeholder="Örn: https://www.turkiye.gov.tr veya şüpheli URL..."
     )
     
     analyze_btn = st.button("🚀 URL'yi Analiz Et", use_container_width=True)
@@ -324,7 +323,6 @@ with tab1:
 
         risk_score, xai_reasons, local_shap = calculate_dynamic_url_risk(input_url, meta)
         
-        # Session State Güncelleme (Tab 2 Canlı Veri Akışı İçin)
         st.session_state['last_analyzed_url'] = input_url
         st.session_state['last_risk_score'] = risk_score
         st.session_state['last_shap_values'] = local_shap
@@ -381,24 +379,22 @@ with tab2:
     current_risk = st.session_state['last_risk_score']
     current_shap = st.session_state['last_shap_values']
 
-    st.info(f"👉 **Şu an İncelenen URL:** `{current_url}` | **Model Risk Tahmini:** **%{current_risk}**")
+    if current_url and current_shap:
+        st.info(f"👉 **Şu an İncelenen URL:** `{current_url}` | **Model Risk Tahmini:** **%{current_risk}**")
 
-    if current_shap:
         col_shap1, col_shap2 = st.columns(2)
         
         with col_shap1:
             st.markdown("### 🎯 Bu URL'ye Özel Local SHAP Karar Grafiği")
             
             shap_df = pd.DataFrame(list(current_shap.items()), columns=['Öznitelik', 'SHAP_Değeri']).sort_values(by='SHAP_Değeri')
-            
-            # Renk paleti: Kırmızı (Phishing yönlü), Mavi (Meşru/Güvenli yönlü)
             colors = ['#d62728' if x > 0 else '#1f77b4' for x in shap_df['SHAP_Değeri']]
 
             fig_shap, ax_shap = plt.subplots(figsize=(8, 5))
             ax_shap.barh(shap_df['Öznitelik'], shap_df['SHAP_Değeri'], color=colors)
             ax_shap.axvline(0, color='gray', linestyle='--', linewidth=1)
             ax_shap.set_xlabel("SHAP Katkı Değeri (+ Kırmızı: Phishing Riski | - Mavi: Güvenilirlik)")
-            ax_shap.set_title(f"Sorgulanan URL için Özelleştirilmiş SHAP Ağırlıkları")
+            ax_shap.set_title(f"Sorgulanan URL İçin Özelleştirilmiş SHAP Ağırlıkları")
             plt.tight_layout()
             st.pyplot(fig_shap)
 
