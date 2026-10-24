@@ -4,7 +4,6 @@ import numpy as np
 import socket
 import ssl
 from datetime import datetime
-import whois
 import urllib.parse
 import re
 import math
@@ -21,10 +20,10 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# 1. GARANTİLİ WHOIS, RDAP, DNS & SSL PARSER
+# 1. GARANTİLİ RDAP, WHOIS REST, DNS & SSL PARSER
 # ---------------------------------------------------------
 def parse_to_datetime(date_val):
-    """Her türlü WHOIS / RDAP tarih verisini datetime objesine çevirir."""
+    """Farklı RDAP/WHOIS tarih verilerini datetime objesine dönüştürür."""
     if not date_val:
         return None
     if isinstance(date_val, list):
@@ -44,8 +43,8 @@ def parse_to_datetime(date_val):
 
 def get_domain_metadata(url):
     """
-    URL adresi üzerinden DNS/IP, WHOIS/RDAP domain yaşı ve SSL sertifikası detaylarını
-    çift katmanlı (socket + RDAP API) olarak sorgular.
+    URL adresi üzerinden DNS/IP, RDAP REST API domain kayıt tarihi/yaşı ve
+    canlı SSL sertifikası detaylarını sorgular.
     """
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.netloc or parsed.path
@@ -71,31 +70,23 @@ def get_domain_metadata(url):
     except Exception:
         pass
 
-    # 2. WHOIS / RDAP Sorgusu (Çift Katmanlı Güvence)
+    # 2. RDAP REST API SORGUSU (ICANN standart RDAP protokolü)
     c_dt, e_dt = None, None
-    
-    # Katman A: Standart WHOIS
     try:
-        w = whois.whois(hostname)
-        c_dt = parse_to_datetime(w.creation_date)
-        e_dt = parse_to_datetime(w.expiration_date)
+        rdap_url = f"https://rdap.org/domain/{hostname}"
+        resp = requests.get(rdap_url, timeout=4, headers={"User-Agent": "Mozilla/5.0"})
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            events = data.get("events", [])
+            for event in events:
+                action = event.get("eventAction")
+                if action in ["registration", "created"]:
+                    c_dt = parse_to_datetime(event.get("eventDate"))
+                elif action in ["expiration", "expires"]:
+                    e_dt = parse_to_datetime(event.get("eventDate"))
     except Exception:
         pass
-
-    # Katman B: Standart WHOIS Patlarsa RDAP REST API Yedeği
-    if not c_dt:
-        try:
-            resp = requests.get(f"https://rdap.org/domain/{hostname}", timeout=3)
-            if resp.status_code == 200:
-                data = resp.json()
-                events = data.get("events", [])
-                for event in events:
-                    if event.get("eventAction") == "registration":
-                        c_dt = parse_to_datetime(event.get("eventDate"))
-                    elif event.get("eventAction") == "expiration":
-                        e_dt = parse_to_datetime(event.get("eventDate"))
-        except Exception:
-            pass
 
     # Tarih İşleme ve Yaş Hesaplama
     if c_dt:
@@ -108,7 +99,7 @@ def get_domain_metadata(url):
     if e_dt:
         metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
 
-    # 3. SSL Sertifikası Sorgusu
+    # 3. CANLI SSL SERTİFİKASI SORGUSU
     try:
         ctx = ssl.create_default_context()
         with socket.create_connection((hostname, 443), timeout=3) as sock:
@@ -144,7 +135,8 @@ def calculate_shannon_entropy(text):
 
 def calculate_url_risk(url, meta):
     """
-    URL özniteliklerine, Homograph saldırılarına ve canlı DNS/WHOIS durumuna dayalı risk puanlama motoru
+    URL özniteliklerine, Homograph saldırılarına, marka taklitlerine ve
+    canlı DNS/WHOIS durumuna dayalı dinamik risk puanlama motoru.
     """
     url_lower = url.lower()
     parsed = urllib.parse.urlparse(url)
@@ -260,7 +252,7 @@ with tab1:
     if analyze_btn and input_url:
         st.subheader("📊 Analiz Çıktısı")
         
-        # 1. Önce canlı WHOIS/RDAP/DNS verilerini çekiyoruz
+        # 1. Önce canlı RDAP/DNS/SSL verilerini çekiyoruz
         with st.spinner("DNS, WHOIS ve SSL bilgileri sorgulanıyor..."):
             meta = get_domain_metadata(input_url)
 

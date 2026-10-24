@@ -7,6 +7,5 @@ lightgbm
 shap
 matplotlib
 seaborn
-whois
 tldextract
 requests
