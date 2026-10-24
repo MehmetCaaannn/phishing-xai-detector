@@ -49,44 +49,52 @@ def get_domain_metadata(url):
     except Exception:
         pass
 
-    # 2. WHOIS Sorgusu (Gelişmiş Tarih Yakalama)
+    # 2. WHOIS Sorgusu (Gelişmiş Tarih Yakalama ve Fallback Yaş Hesaplama)
     try:
         w = whois.whois(hostname)
         
-        # Creation Date (Kayıt Tarihi)
         creation = w.creation_date
         if isinstance(creation, list) and len(creation) > 0:
             creation = creation[0]
             
-        # Expiration Date (Bitiş Tarihi)
         expiration = w.expiration_date
         if isinstance(expiration, list) and len(expiration) > 0:
             expiration = expiration[0]
-            
-        # Tarih İşleme ve Yaş Hesaplama
+
+        # Creation Date İşleme
+        creation_dt = None
         if creation:
             if isinstance(creation, datetime):
-                metadata["creation_date"] = creation.strftime("%Y-%m-%d")
-                age = (datetime.now() - creation).days
-                if age > 0:
-                    metadata["domain_age_days"] = f"{age} Gün ({round(age/365, 1)} Yıl)"
+                creation_dt = creation
             else:
-                metadata["creation_date"] = str(creation).split()[0]
+                try:
+                    c_str = str(creation).split()[0]
+                    creation_dt = datetime.strptime(c_str, "%Y-%m-%d")
+                except Exception:
+                    pass
 
+        # Expiration Date İşleme
+        expiration_dt = None
         if expiration:
             if isinstance(expiration, datetime):
-                metadata["expiration_date"] = expiration.strftime("%Y-%m-%d")
+                expiration_dt = expiration
             else:
-                metadata["expiration_date"] = str(expiration).split()[0]
+                try:
+                    e_str = str(expiration).split()[0]
+                    expiration_dt = datetime.strptime(e_str, "%Y-%m-%d")
+                except Exception:
+                    pass
 
-        # Eğer creation_date oluştu ama age hesaplanamadıysa yedek hesaplama
-        if metadata["creation_date"] != "Bilinmiyor" and metadata["domain_age_days"] == "Bilinmiyor":
-            try:
-                c_dt = datetime.strptime(metadata["creation_date"], "%Y-%m-%d")
-                age = (datetime.now() - c_dt).days
-                metadata["domain_age_days"] = f"{age} Gün ({round(age/365, 1)} Yıl)"
-            except Exception:
-                pass
+        # Metin Formatına Dönüştürme ve Yaş Hesaplama
+        if creation_dt:
+            metadata["creation_date"] = creation_dt.strftime("%Y-%m-%d")
+            age = (datetime.now() - creation_dt).days
+            if age > 0:
+                years = round(age / 365.25, 1)
+                metadata["domain_age_days"] = f"{age} Gün ({years} Yıl)"
+
+        if expiration_dt:
+            metadata["expiration_date"] = expiration_dt.strftime("%Y-%m-%d")
 
     except Exception:
         pass
@@ -130,8 +138,7 @@ with tab1:
     if analyze_btn and input_url:
         st.subheader("📊 Analiz Çıktısı")
         
-        # Örnek/Mevcut Mantığınız (Skorlama)
-        # Gerçek model tahmininiz buraya bağlanır
+        # Risk Skoru Mantığınız (Örnek/Canlı)
         is_gov = ".gov.tr" in input_url or "turkiye.gov.tr" in input_url
         risk_score = 15.0 if is_gov else 28.0
         
