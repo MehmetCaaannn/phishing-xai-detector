@@ -21,7 +21,7 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# 1. AKILLI SUBDOMAIN PARSER & RDAP / WHOIS METADATA MOTORU
+# 1. AKILLI METADATA & ÇİFT KATMANLI SSL SORGUSU
 # ---------------------------------------------------------
 def parse_to_datetime(date_val):
     """Farklı RDAP/WHOIS tarih verilerini datetime objesine dönüştürür."""
@@ -63,15 +63,15 @@ def fetch_rdap_dates(domain_name):
 
 def get_domain_metadata(url):
     """
-    Subdomain temizleme (tldextract), DNS/IP, RDAP ve SSL sertifika detaylarını sorgular.
+    DNS/IP, Kök Domain RDAP Sorgusu ve Çift Katmanlı SSL Sertifikası Detaylarını Çeker.
     """
-    # 1. URL'yi Temizle ve Subdomain'den Kök Domaini (registered_domain) Ayıkla
     ext = tldextract.extract(url)
-    root_domain = ext.registered_domain  # Örn: kamuilan.sbb.gov.tr -> sbb.gov.tr
+    root_domain = ext.registered_domain
     
     parsed = urllib.parse.urlparse(url if url.startswith(('http://', 'https://')) else f'http://{url}')
     full_hostname = parsed.netloc or parsed.path
     full_hostname = full_hostname.split(':')[0]
+    clean_hostname = full_hostname.replace("www.", "")
     
     metadata = {
         "domain_age_days": "Geçersiz / Bulunamadı",
@@ -86,7 +86,7 @@ def get_domain_metadata(url):
     if not full_hostname:
         return metadata
 
-    # 2. DNS / IP Bilgisi (Tam hostname üzerinden sorgulanır)
+    # 1. DNS / IP Bilgisi (Önce Tam Adres, Olmazsa Kök Domain)
     try:
         ip = socket.gethostbyname(full_hostname)
         metadata["dns_ip"] = ip
@@ -98,19 +98,18 @@ def get_domain_metadata(url):
             except Exception:
                 pass
 
-    # 3. WHOIS / RDAP Sorgusu (Sadece Kök Domain Üzerinden Sorgulanır)
+    # 2. WHOIS / RDAP Sorgusu (Kök Domain Üzerinden)
     c_dt, e_dt = None, None
-    target_domain = root_domain if root_domain else full_hostname
+    target_domain = root_domain if root_domain else clean_hostname
 
     if target_domain:
         c_dt, e_dt = fetch_rdap_dates(target_domain)
 
-        # EĞER .TR UZANTILI DOMAINDE WHOIS DÖNMEDİYSE: Otomatik .com / .net Kök Mirror Kontrolü
         if not c_dt and target_domain.endswith(".tr") and not target_domain.endswith(".gov.tr") and not target_domain.endswith(".edu.tr"):
             mirror_host = target_domain.replace(".com.tr", ".com").replace(".net.tr", ".net").replace(".org.tr", ".org").replace(".tr", ".com")
             c_dt, e_dt = fetch_rdap_dates(mirror_host)
 
-    # 4. .GOV.TR ve .EDU.TR KAMU DOMAINLERI ICIN DYNAMIC FALLBACK
+    # 3. .GOV.TR ve .EDU.TR KAMU DOMAINLERI ICIN DYNAMIC FALLBACK
     if not c_dt and (target_domain.endswith(".gov.tr") or target_domain.endswith(".edu.tr")):
         gov_tr_registry = {
             "turkiye.gov.tr": ("2008-05-20", "2030-01-01"),
@@ -126,11 +125,9 @@ def get_domain_metadata(url):
             c_dt = parse_to_datetime(c_str)
             e_dt = parse_to_datetime(e_str)
         else:
-            # Diğer tüm bilinmeyen resmi kamu domainleri için varsayılan kamu tescil tarihi
             c_dt = parse_to_datetime("2010-01-01")
             e_dt = parse_to_datetime("2030-01-01")
 
-    # Tarih İşleme ve Yaş Hesaplama
     if c_dt:
         metadata["creation_date"] = c_dt.strftime("%Y-%m-%d")
         age_days = (datetime.now() - c_dt).days
@@ -141,29 +138,37 @@ def get_domain_metadata(url):
     if e_dt:
         metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
 
-    # 5. CANLI SSL SERTİFİKASI SORGUSU (Tam Subdomain Üzerinden)
-    try:
-        ctx = ssl.create_default_context()
-        with socket.create_connection((full_hostname, 443), timeout=2.5) as sock:
-            with ctx.wrap_socket(sock, server_hostname=full_hostname) as ssock:
-                cert = ssock.getpeercert()
-                issuer = dict(x[0] for x in cert.get('issuer', []))
-                metadata["ssl_issuer"] = issuer.get('organizationName', issuer.get('commonName', 'Standart SSL'))
-                
-                fmt = r'%b %d %H:%M:%S %Y %Z'
-                valid_from = datetime.strptime(cert['notBefore'], fmt)
-                valid_to = datetime.strptime(cert['notAfter'], fmt)
-                
-                metadata["ssl_valid_from"] = valid_from.strftime("%Y-%m-%d")
-                metadata["ssl_valid_to"] = valid_to.strftime("%Y-%m-%d")
-    except Exception:
-        pass
+    # 4. ÇİFT KATMANLI CANLI SSL SERTİFİKASI SORGUSU
+    # Önce girilen tam hostname ile dene, başaramazsa www olmadan dene
+    ssl_hosts_to_try = [full_hostname, clean_hostname]
+    ssl_success = False
+
+    for host in ssl_hosts_to_try:
+        if ssl_success or not host:
+            continue
+        try:
+            ctx = ssl.create_default_context()
+            with socket.create_connection((host, 443), timeout=3.0) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                    cert = ssock.getpeercert()
+                    issuer = dict(x[0] for x in cert.get('issuer', []))
+                    metadata["ssl_issuer"] = issuer.get('organizationName', issuer.get('commonName', 'Standart SSL'))
+                    
+                    fmt = r'%b %d %H:%M:%S %Y %Z'
+                    valid_from = datetime.strptime(cert['notBefore'], fmt)
+                    valid_to = datetime.strptime(cert['notAfter'], fmt)
+                    
+                    metadata["ssl_valid_from"] = valid_from.strftime("%Y-%m-%d")
+                    metadata["ssl_valid_to"] = valid_to.strftime("%Y-%m-%d")
+                    ssl_success = True
+        except Exception:
+            pass
         
     return metadata
 
 
 # ---------------------------------------------------------
-# 2. DİNAMİK RİSK HESAPLAMA MOTORU
+# 2. STRICT (KATI ZORUNLULUKLU) DİNAMİK RİSK MOTORU
 # ---------------------------------------------------------
 def calculate_shannon_entropy(text):
     """URL metninin rastgelelik / entropi skorunu hesaplar."""
@@ -177,37 +182,51 @@ def calculate_shannon_entropy(text):
 
 def calculate_dynamic_url_risk(url, meta):
     """
-    1. Otomatik Kamu/Resmi Domain & Güvenilir Altyapı Tespiti
-    2. Canlı DNS / IP Varlık Kontrolü
-    3. Metin Entropisi, Uzunluk ve Şüpheli Metin Analizi
+    0. KATMAN: DNS IP Varlık Zorunluluğu (IP yoksa kesin YÜKSEK RİSK)
+    1. KATMAN: Kamu/Resmi Domain & SSL Güvenilirlik Kontrolü
+    2. KATMAN: Sezgisel (Heuristic) & Marka Taklidi Analizi
     """
     url_lower = url.lower().strip()
     ext = tldextract.extract(url_lower)
     hostname_clean = ext.registered_domain or ext.domain
 
-    # Mikro dinamik varyasyon faktörü
     url_len = len(url)
     entropy = calculate_shannon_entropy(hostname_clean)
     micro_offset = round(((url_len % 7) * 0.3) + ((entropy * 10) % 1.5), 1)
 
-    # 🟢 1. KATMAN: RESMİ KAMU VE ÜNİVERSİTE DOMAİNLERİ (.gov.tr / .edu.tr)
-    if (url_lower.endswith(".gov.tr") or url_lower.endswith(".edu.tr") or ".gov.tr/" in url_lower or ".edu.tr/" in url_lower) and "xn--" not in url_lower:
-        score = round(4.2 + (micro_offset * 0.3), 1)
-        return score, [("✅ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem tarafından doğrulanmış yüksek güvenilirlikli devlet/eğitim kurumu.")]
-
-    # 🟡 2. KATMAN: CANLI DNS / IP ÇÖZÜMLEME VARLIK KONTROLÜ
+    # 🛑 0. KATMAN: DNS IP ADRESİ KONTROLÜ (İSTİSNASIZ EN YÜKSEK ÖNCELİK)
     if meta["dns_ip"] == "IP Bulunamadı":
         base_dns_score = round(91.2 + micro_offset, 1)
         return min(base_dns_score, 98.6), [
-            ("🚨 **Aktif DNS / IP Kaydı Bulunamadı**", f"`{hostname_clean}` domainine ait aktif bir IP adresi çözümlenemedi. **Geçersiz, Pasif veya Şüpheli Alan Adı!**"),
-            ("❌ **Bilinmeyen / Yanıltıcı Domain Yapısı**", "İnternet üzerinde aktif sunucu karşılığı olmayan adresler yüksek risk taşır.")
+            ("🚨 **Aktif DNS / IP Kaydı Bulunamadı**", f"`{url}` adresine ait aktif bir IP çözümlenemedi. **Domain Pasif, Erişilemez veya Şüpheli!**"),
+            ("❌ **Kritik Bağlantı Hatası**", "IP karşılığı olmayan domainler kamu uzantılı olsa dahi güvenli olarak değerlendirilemez.")
         ]
 
-    # 🔴 3. KATMAN: SEZGİSEL (HEURISTIC) & MARKA TAKLİDİ ANALİZİ
+    # 🟢 1. KATMAN: RESMİ KAMU VE ÜNİVERSİTE DOMAİNLERİ (.gov.tr / .edu.tr)
+    is_gov_edu = (url_lower.endswith(".gov.tr") or url_lower.endswith(".edu.tr") or ".gov.tr/" in url_lower or ".edu.tr/" in url_lower) and "xn--" not in url_lower
+    
+    if is_gov_edu:
+        # Eğer kamu/üniversite sitesinde SSL sertifikası çekilemediyse ceza ekle
+        if meta["ssl_issuer"] == "SSL Yok / Doğrulanmadı" and url_lower.startswith("https://"):
+            score = round(42.5 + micro_offset, 1)
+            return score, [
+                ("⚠️ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem kamu alan adını doğruladı."),
+                ("❌ **Doğrulanmamış / Eksik SSL Sertifikası**", "Sitenin SSL sertifikası doğrulanamadı veya güvenli soket bağlantısı kurulamadı. **Sertifika Riski!**")
+            ]
+        else:
+            score = round(4.2 + (micro_offset * 0.3), 1)
+            return score, [("✅ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem tarafından doğrulanmış yüksek güvenilirlikli devlet/eğitim kurumu.")]
+
+    # 🔴 2. KATMAN: SEZGİSEL (HEURISTIC) & MARKA TAKLİDİ ANALİZİ
     score = 14.5 + micro_offset
     explanations = []
 
     explanations.append((f"🌐 **Aktif IP Adresi Doğrulandı ({meta['dns_ip']})**", "Domain internet üzerinde aktif bir IP adresine yönleniyor."))
+
+    # SSL Kontrolü
+    if meta["ssl_issuer"] == "SSL Yok / Doğrulanmadı" and url_lower.startswith("https://"):
+        score += 25.0
+        explanations.append(("❌ **Doğrulanmamış SSL Sertifikası**", "Bağlantıda şifreleme/SSL sertifikası doğrulanamadı."))
 
     # Marka / Kamu Kurumu Taklidi (Typosquatting)
     critical_brands = ['turkiye', 'edevlet', 'e-devlet', 'garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank', 'gib', 'mhrs']
@@ -220,7 +239,7 @@ def calculate_dynamic_url_risk(url, meta):
                 score += 49.0
                 explanations.append((f"🚨 **Banka/Kurum Taklidi ({brand})**", f"URL resmi banka domain yapısıyla eşleşmiyor. **Phishing Riski!**"))
 
-    # Homograph / Punycode (Farklı Alfabe Kullanımı)
+    # Homograph / Punycode
     if "xn--" in hostname_clean or "xn--" in url_lower:
         score += 48.0
         explanations.append(("🚨 **Homograph (Eş Yazımlı Alfabesi Saldırısı / Punycode)**", "URL'de gizli/farklı alfabe karakterleri tespit edildi. **Yüksek Phishing Riski!**"))
@@ -239,8 +258,6 @@ def calculate_dynamic_url_risk(url, meta):
     if has_bad_tld:
         score += 31.0
         explanations.append(("❌ **Şüpheli TLD Uzantısı**", "Zararlı olma riskini **yüksek oranda artıran** faktör."))
-    else:
-        explanations.append(("✅ **Standart TLD Uzantısı**", "Güvenilirliği **destekleyen** faktör."))
 
     # Phishing Kelime Analizi
     phish_keywords = ['login', 'verify', 'account', 'banking', 'aidat', 'sorgulama', 'iade', 'guncelleme', 'security', 'secure', 'paypaal', 'auth', 'update']
@@ -248,27 +265,6 @@ def calculate_dynamic_url_risk(url, meta):
     if matched:
         score += len(matched) * 13.5
         explanations.append((f"❌ **Şüpheli Kelime Dizesi ({', '.join(matched)})**", "Zararlı olma riskini **artıran** faktör."))
-
-    # Doğrudan IP Adresi Kullanımı
-    ip_pattern = r'https?://(?:\d{1,3}\.){3}\d{1,3}'
-    if re.search(ip_pattern, url_lower):
-        score += 41.0
-        explanations.append(("❌ **Doğrudan IP Adresi Kullanımı**", "Zararlı olma riskini **çok yüksek oranda artıran** faktör."))
-
-    # Tire (-) ve At (@) Sayısı
-    dash_count = url_lower.count('-')
-    if dash_count > 2:
-        score += dash_count * 4.2
-        explanations.append((f"❌ **Yüksek Tire (-) Sayısı ({dash_count})**", "Zararlı olma riskini **artıran** faktör."))
-
-    if "@" in url_lower:
-        score += 24.0
-        explanations.append(("❌ **@ İşareti Kullanımı**", "Kullanıcıyı yanıltma riskini **artıran** faktör."))
-
-    # Metin Entropisi (Karakter Karmaşıklığı)
-    if entropy > 4.2:
-        score += 16.5
-        explanations.append((f"❌ **Yüksek Karmaşıklık / Entropi Skor Skalası ({entropy})**", "Rastgele üretilmiş alan adı riskini **artıran** faktör."))
 
     final_score = round(min(max(score, 4.2), 98.7), 1)
     return final_score, explanations
@@ -292,11 +288,11 @@ with tab1:
     if analyze_btn and input_url:
         st.subheader("📊 Analiz Çıktısı")
         
-        # 1. Canlı Metadata Sorgusu (tldextract ile Subdomain Extraction)
+        # 1. Canlı Metadata Sorgusu
         with st.spinner("DNS, WHOIS/RDAP ve SSL bilgileri canlı sorgulanıyor..."):
             meta = get_domain_metadata(input_url)
 
-        # 2. Dinamik Risk Analizi Hesabı
+        # 2. Dinamik Risk Analizi Hesabı (Strict DNS/SSL Enforced)
         risk_score, xai_reasons = calculate_dynamic_url_risk(input_url, meta)
         
         col_score, col_status = st.columns([1, 2])
