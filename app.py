@@ -7,6 +7,7 @@ from datetime import datetime
 import whois
 import urllib.parse
 import re
+import math
 
 # Page Setup
 st.set_page_config(
@@ -19,67 +20,135 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# 1. YARDIMCI FONKSİYONLAR (RİSK DİNAMİK HESAPLAMA)
+# 1. DİNAMİK RİSK & XAI HESAPLAMA MOTORU (HOMOGRAPH EKLENDİ)
 # ---------------------------------------------------------
+def calculate_shannon_entropy(text):
+    """URL metninin rastgelelik / entropi skorunu hesaplar."""
+    if not text:
+        return 0.0
+    entropy = 0
+    for x in set(text):
+        p_x = float(text.count(x)) / len(text)
+        entropy -= p_x * math.log(p_x, 2)
+    return round(entropy, 2)
+
 def calculate_url_risk(url):
     """
-    URL dinamik öznitelik analizi ve heuristik risk puanlama
+    URL özniteliklerine dayalı tam dinamik, Homograph (Punycode) tespitli risk puanlama motoru
     """
     url_lower = url.lower()
-    score = 15.0  # Baz risk puanı
+    parsed = urllib.parse.urlparse(url)
+    hostname = parsed.netloc or parsed.path
+    
+    score = 12.0  # Temel başlangıç puanı
     explanations = []
 
-    # 1. Uzantı (TLD) Kontrolü
-    suspicious_tlds = ['.top', '.xyz', '.info', '.site', '.online', '.club', '.tk', '.ml', '.ga', '.cf', '.gq', '.verify.net']
-    if any(url_lower.endswith(tld) or (tld + "/") in url_lower for tld in suspicious_tlds):
-        score += 35.0
+    # 🛑 0. HOMOGRAPH / PUNYCODE (FARKLI ALFABE KULLANIMI) KONTROLÜ
+    if "xn--" in hostname or "xn--" in url_lower:
+        score += 50.0
+        explanations.append(("🚨 **Homograph (Eş Yazımlı Alfabesi Saldırısı / Punycode)**", "URL'de gizli/farklı alfabe karakterleri (Örn: Kiril alfabesi 'а') tespit edildi. **Yüksek Phishing Riski!**"))
+    
+    # ASCII Dışı Karakter Kontrolü
+    try:
+        hostname.encode('ascii')
+    except UnicodeEncodeError:
+        score += 45.0
+        explanations.append(("🚨 **ASCII Dışı Özel Karakterler**", "Domain adında varsayılan İngilizce alfabesi dışında yanıltıcı karakterler tespit edildi."))
+
+    # 1. HTTP / HTTPS Kontrolü
+    if url_lower.startswith("http://"):
+        score += 15.0
+        explanations.append(("❌ **Güvensiz Protokol (HTTP)**", "Şifrelenmemiş bağlantı kullanımı riski **artıran** faktör."))
+    elif url_lower.startswith("https://"):
+        score -= 5.0
+        explanations.append(("✅ **Güvenli Protokol (HTTPS)**", "Güvenilirliği **destekleyen** faktör."))
+
+    # 2. Şüpheli TLD Uzantıları
+    suspicious_tlds = ['.top', '.xyz', '.info', '.site', '.online', '.club', '.tk', '.ml', '.ga', '.cf', '.gq', '.verify.net', '.zip']
+    has_bad_tld = any(hostname.endswith(tld) or (tld + "/") in url_lower for tld in suspicious_tlds)
+    if has_bad_tld:
+        score += 32.5
         explanations.append(("❌ **Şüpheli TLD Uzantısı**", "Zararlı olma riskini **yüksek oranda artıran** faktör."))
     else:
-        explanations.append(("✅ **Güvenilir TLD Uzantısı**", "Güvenilirliği **destekleyen** faktör."))
+        explanations.append(("✅ **Standart/Güvenilir TLD Uzantısı**", "Güvenilirliği **destekleyen** faktör."))
 
-    # 2. Phishing Kelimeleri
-    phish_keywords = ['login', 'verify', 'account', 'banking', 'aidat', 'sorgulama', 'iade', 'guncelleme', 'security', 'secure', 'e-devlet', 'garanti', 'ziraat', 'paypaal']
-    matched_keywords = [kw for kw in phish_keywords if kw in url_lower]
-    if len(matched_keywords) > 0 and not (".gov.tr" in url_lower or "google.com" in url_lower or "garantibbva.com.tr" in url_lower or "github.com" in url_lower):
-        score += len(matched_keywords) * 15.0
-        explanations.append((f"❌ **Şüpheli Kelime Dizesi ({', '.join(matched_keywords)})**", "Zararlı olma riskini **artıran** faktör."))
+    # 3. Phishing Kelime Analizi
+    phish_keywords = ['login', 'verify', 'account', 'banking', 'aidat', 'sorgulama', 'iade', 'guncelleme', 'security', 'secure', 'e-devlet', 'garanti', 'ziraat', 'paypaal', 'auth', 'update', 'amazon']
+    matched = [kw for kw in phish_keywords if kw in url_lower]
+    
+    trusted_domains = [".gov.tr", "google.com", "garantibbva.com.tr", "github.com", "turkiye.gov.tr", "ahmetyesevi.edu.tr", "amazon.com"]
+    is_trusted = any(td in url_lower for td in trusted_domains) and "xn--" not in url_lower
 
-    # 3. IP Adresi Kullanımı
+    if matched and not is_trusted:
+        score += len(matched) * 14.2
+        explanations.append((f"❌ **Şüpheli Kelime Dizesi ({', '.join(matched)})**", "Zararlı olma riskini **artıran** faktör."))
+
+    # 4. Doğrudan IP Adresi Kullanımı
     ip_pattern = r'https?://(?:\d{1,3}\.){3}\d{1,3}'
     if re.search(ip_pattern, url_lower):
-        score += 40.0
+        score += 42.0
         explanations.append(("❌ **Doğrudan IP Adresi Kullanımı**", "Zararlı olma riskini **çok yüksek oranda artıran** faktör."))
 
-    # 4. Tire (-) Sayısı
+    # 5. Tire (-), At (@), ve Özel Karakter Sayısı
     dash_count = url_lower.count('-')
     if dash_count > 2:
-        score += dash_count * 5.0
+        score += dash_count * 4.5
         explanations.append((f"❌ **Yüksek Tire (-) Sayısı ({dash_count})**", "Zararlı olma riskini **artıran** faktör."))
     else:
         explanations.append((f"✅ **Tire (-) Sayısı ({dash_count})**", "Güvenilirliği **destekleyen** faktör."))
 
-    # 5. URL Uzunluğu
-    if len(url) > 50:
-        score += 15.0
-        explanations.append((f"❌ **Uzun URL Yapısı ({len(url)} karakter)**", "Zararlı olma riskini **artıran** faktör."))
+    if "@" in url_lower:
+        score += 25.0
+        explanations.append(("❌ **@ İşareti Kullanımı**", "Kullanıcıyı yanıltma riskini **artıran** faktör."))
+
+    # 6. Metin Entropisi (Karakter Karmaşıklığı)
+    entropy = calculate_shannon_entropy(hostname)
+    if entropy > 4.2:
+        score += 18.0
+        explanations.append((f"❌ **Yüksek Karmaşıklık / Entropi Skor Skalası ({entropy})**", "Rastgele üretilmiş alan adı riskini **artıran** faktör."))
+
+    # 7. URL Uzunluk Analizi
+    url_len = len(url)
+    if url_len > 55:
+        score += 12.0
+        explanations.append((f"❌ **Uzun URL Yapısı ({url_len} karakter)**", "Zararlı olma riskini **artıran** faktör."))
     else:
-        explanations.append((f"✅ **Kısa/Standart URL ({len(url)} karakter)**", "Güvenilirliği **destekleyen** faktör."))
+        explanations.append((f"✅ **Kısa / Standart URL Yapısı ({url_len} karakter)**", "Güvenilirliği **destekleyen** faktör."))
 
-    # 6. Resmi Domain İndirimi
-    if ".gov.tr" in url_lower or ".edu.tr" in url_lower:
-        score = 5.0
-        explanations = [("✅ **Resmi Kamu/Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Yüksek güvenilirlik faktörü.")]
+    # 8. Kamu / Üniversite Özel İndirimi
+    if (".gov.tr" in url_lower or ".edu.tr" in url_lower) and "xn--" not in url_lower:
+        score = 8.4
+        explanations = [("✅ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem tarafından onaylanmış yüksek güvenilirlik faktörü.")]
 
-    # Puanı %0 - %99 arasında sınırla
-    final_score = round(min(max(score, 5.0), 98.5), 1)
+    # Skoru %4.5 ile %98.8 arasında dinamik sınırla
+    final_score = round(min(max(score, 4.5), 98.8), 1)
     return final_score, explanations
 
 
+# ---------------------------------------------------------
+# 2. GARANTİLİ WHOIS, DNS & SSL PARSER
+# ---------------------------------------------------------
+def parse_to_datetime(date_val):
+    """Her türlü WHOIS tarih verisini datetime objesine çevirir."""
+    if not date_val:
+        return None
+    if isinstance(date_val, list):
+        date_val = date_val[0] if len(date_val) > 0 else None
+    if not date_val:
+        return None
+    if isinstance(date_val, datetime):
+        return date_val
+
+    date_str = str(date_val).strip().split('T')[0].split()[0]
+    for fmt in ("%Y-%m-%d", "%d-%b-%Y", "%d/%m/%Y", "%Y/%m/%d", "%Y.%m.%d"):
+        try:
+            return datetime.strptime(date_str, fmt)
+        except Exception:
+            continue
+    return None
+
 def get_domain_metadata(url):
-    """
-    URL adresi üzerinden DNS/IP, WHOIS domain yaşı ve SSL sertifikası
-    detaylarını canlı sorgular.
-    """
+    """URL adresi üzerinden DNS/IP, WHOIS domain yaşı ve SSL sertifikası detaylarını sorgular."""
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.netloc or parsed.path
     hostname = hostname.split(':')[0]
@@ -107,45 +176,18 @@ def get_domain_metadata(url):
     # 2. WHOIS Sorgusu
     try:
         w = whois.whois(hostname)
-        creation = w.creation_date
-        if isinstance(creation, list) and len(creation) > 0:
-            creation = creation[0]
-            
-        expiration = w.expiration_date
-        if isinstance(expiration, list) and len(expiration) > 0:
-            expiration = expiration[0]
+        c_dt = parse_to_datetime(w.creation_date)
+        e_dt = parse_to_datetime(w.expiration_date)
 
-        creation_dt = None
-        if creation:
-            if isinstance(creation, datetime):
-                creation_dt = creation
-            else:
-                try:
-                    c_str = str(creation).split()[0]
-                    creation_dt = datetime.strptime(c_str, "%Y-%m-%d")
-                except Exception:
-                    pass
+        if c_dt:
+            metadata["creation_date"] = c_dt.strftime("%Y-%m-%d")
+            age_days = (datetime.now() - c_dt).days
+            if age_days > 0:
+                years = round(age_days / 365.25, 1)
+                metadata["domain_age_days"] = f"{age_days} Gün ({years} Yıl)"
 
-        expiration_dt = None
-        if expiration:
-            if isinstance(expiration, datetime):
-                expiration_dt = expiration
-            else:
-                try:
-                    e_str = str(expiration).split()[0]
-                    expiration_dt = datetime.strptime(e_str, "%Y-%m-%d")
-                except Exception:
-                    pass
-
-        if creation_dt:
-            metadata["creation_date"] = creation_dt.strftime("%Y-%m-%d")
-            age = (datetime.now() - creation_dt).days
-            if age > 0:
-                years = round(age / 365.25, 1)
-                metadata["domain_age_days"] = f"{age} Gün ({years} Yıl)"
-
-        if expiration_dt:
-            metadata["expiration_date"] = expiration_dt.strftime("%Y-%m-%d")
+        if e_dt:
+            metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
 
     except Exception:
         pass
@@ -172,7 +214,7 @@ def get_domain_metadata(url):
 
 
 # ---------------------------------------------------------
-# 2. SEKMELER / TABS
+# 3. SEKMELER / TABS
 # ---------------------------------------------------------
 tab1, tab2, tab3 = st.tabs(["🔍 Canlı URL Analiz Paneli", "📈 SHAP (XAI) Öznitelik Analizi", "📊 Model Benchmark & Performans"])
 
