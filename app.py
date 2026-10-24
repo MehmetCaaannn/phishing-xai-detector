@@ -8,6 +8,7 @@ import whois
 import urllib.parse
 import re
 import math
+import requests
 
 # Page Setup
 st.set_page_config(
@@ -20,10 +21,10 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# 1. GARANTİLİ WHOIS, DNS & SSL PARSER
+# 1. GARANTİLİ WHOIS, RDAP, DNS & SSL PARSER
 # ---------------------------------------------------------
 def parse_to_datetime(date_val):
-    """Her türlü WHOIS tarih verisini datetime objesine çevirir."""
+    """Her türlü WHOIS / RDAP tarih verisini datetime objesine çevirir."""
     if not date_val:
         return None
     if isinstance(date_val, list):
@@ -42,7 +43,10 @@ def parse_to_datetime(date_val):
     return None
 
 def get_domain_metadata(url):
-    """URL adresi üzerinden DNS/IP, WHOIS domain yaşı ve SSL sertifikası detaylarını sorgular."""
+    """
+    URL adresi üzerinden DNS/IP, WHOIS/RDAP domain yaşı ve SSL sertifikası detaylarını
+    çift katmanlı (socket + RDAP API) olarak sorgular.
+    """
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.netloc or parsed.path
     hostname = hostname.split(':')[0]
@@ -67,24 +71,42 @@ def get_domain_metadata(url):
     except Exception:
         pass
 
-    # 2. WHOIS Sorgusu
+    # 2. WHOIS / RDAP Sorgusu (Çift Katmanlı Güvence)
+    c_dt, e_dt = None, None
+    
+    # Katman A: Standart WHOIS
     try:
         w = whois.whois(hostname)
         c_dt = parse_to_datetime(w.creation_date)
         e_dt = parse_to_datetime(w.expiration_date)
-
-        if c_dt:
-            metadata["creation_date"] = c_dt.strftime("%Y-%m-%d")
-            age_days = (datetime.now() - c_dt).days
-            if age_days > 0:
-                years = round(age_days / 365.25, 1)
-                metadata["domain_age_days"] = f"{age_days} Gün ({years} Yıl)"
-
-        if e_dt:
-            metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
-
     except Exception:
         pass
+
+    # Katman B: Standart WHOIS Patlarsa RDAP REST API Yedeği
+    if not c_dt:
+        try:
+            resp = requests.get(f"https://rdap.org/domain/{hostname}", timeout=3)
+            if resp.status_code == 200:
+                data = resp.json()
+                events = data.get("events", [])
+                for event in events:
+                    if event.get("eventAction") == "registration":
+                        c_dt = parse_to_datetime(event.get("eventDate"))
+                    elif event.get("eventAction") == "expiration":
+                        e_dt = parse_to_datetime(event.get("eventDate"))
+        except Exception:
+            pass
+
+    # Tarih İşleme ve Yaş Hesaplama
+    if c_dt:
+        metadata["creation_date"] = c_dt.strftime("%Y-%m-%d")
+        age_days = (datetime.now() - c_dt).days
+        if age_days > 0:
+            years = round(age_days / 365.25, 1)
+            metadata["domain_age_days"] = f"{age_days} Gün ({years} Yıl)"
+
+    if e_dt:
+        metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
 
     # 3. SSL Sertifikası Sorgusu
     try:
@@ -122,7 +144,7 @@ def calculate_shannon_entropy(text):
 
 def calculate_url_risk(url, meta):
     """
-    URL özniteliklerine ve canlı DNS/WHOIS durumuna dayalı risk puanlama motoru
+    URL özniteliklerine, Homograph saldırılarına ve canlı DNS/WHOIS durumuna dayalı risk puanlama motoru
     """
     url_lower = url.lower()
     parsed = urllib.parse.urlparse(url)
@@ -135,7 +157,7 @@ def calculate_url_risk(url, meta):
     critical_brands = ['turkiye', 'edevlet', 'e-devlet', 'garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank', 'gib', 'mhrs']
     for brand in critical_brands:
         if brand in hostname:
-            # Eğer kamu markası ama .gov.tr değilse -> Büyük Risk!
+            # Kamu markası ama resmi .gov.tr değilse -> Yüksek Risk!
             if brand in ['turkiye', 'edevlet', 'e-devlet', 'gib', 'mhrs'] and not hostname.endswith(".gov.tr"):
                 score += 55.0
                 explanations.append((f"🚨 **Marka/Kamu Kurumu Taklidi ({brand})**", f"URL resmi kamu uzantısı (.gov.tr) taşımıyor! **Sahte/Taklit Domain Riski!**"))
@@ -144,10 +166,10 @@ def calculate_url_risk(url, meta):
                 score += 50.0
                 explanations.append((f"🚨 **Banka/Kurum Taklidi ({brand})**", f"URL resmi banka domain yapısıyla eşleşmiyor. **Phishing Riski!**"))
 
-    # 🛑 1. HOMOGRAPH / PUNYCODE KONTROLÜ
+    # 🛑 1. HOMOGRAPH / PUNYCODE KONTROLÜ (FARKLI ALFABE KULLANIMI)
     if "xn--" in hostname or "xn--" in url_lower:
         score += 50.0
-        explanations.append(("🚨 **Homograph (Eş Yazımlı Alfabesi Saldırısı / Punycode)**", "URL'de gizli/farklı alfabe karakterleri tespit edildi. **Yüksek Phishing Riski!**"))
+        explanations.append(("🚨 **Homograph (Eş Yazımlı Alfabesi Saldırısı / Punycode)**", "URL'de gizli/farklı alfabe karakterleri (Örn: Kiril alfabesi 'а') tespit edildi. **Yüksek Phishing Riski!**"))
 
     # 🛑 2. CANLI DNS VE WHOIS DURUM KONTROLÜ
     if meta["dns_ip"] == "Bulunamadı":
@@ -238,7 +260,7 @@ with tab1:
     if analyze_btn and input_url:
         st.subheader("📊 Analiz Çıktısı")
         
-        # 1. Önce canlı WHOIS/DNS verilerini çekiyoruz
+        # 1. Önce canlı WHOIS/RDAP/DNS verilerini çekiyoruz
         with st.spinner("DNS, WHOIS ve SSL bilgileri sorgulanıyor..."):
             meta = get_domain_metadata(input_url)
 

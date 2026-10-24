@@ -7,7 +7,6 @@ lightgbm
 shap
 matplotlib
 seaborn
-python-whois
+whois
 tldextract
 requests
-python-whois
