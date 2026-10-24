@@ -21,7 +21,7 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# 1. AKILLI METADATA & ÇİFT KATMANLI SSL SORGUSU
+# 1. AKILLI METADATA & DNS KONTROLLÜ WHOIS MOTORU
 # ---------------------------------------------------------
 def parse_to_datetime(date_val):
     """Farklı RDAP/WHOIS tarih verilerini datetime objesine dönüştürür."""
@@ -63,7 +63,8 @@ def fetch_rdap_dates(domain_name):
 
 def get_domain_metadata(url):
     """
-    DNS/IP, Kök Domain RDAP Sorgusu ve Çift Katmanlı SSL Sertifikası Detaylarını Çeker.
+    Sadece AKTİF ve IP adresi çözümlenebilen domainler için WHOIS/RDAP sorgular.
+    Pasif/Kayıtsız domainlerde tarih/yaş basmaz.
     """
     ext = tldextract.extract(url)
     root_domain = ext.registered_domain
@@ -74,9 +75,9 @@ def get_domain_metadata(url):
     clean_hostname = full_hostname.replace("www.", "")
     
     metadata = {
-        "domain_age_days": "Geçersiz / Bulunamadı",
-        "creation_date": "Kayıt Yolu Yok",
-        "expiration_date": "Süresiz / Kamu",
+        "domain_age_days": "Kayıtsız / Pasif Domain",
+        "creation_date": "Kayıt Kaydı Bulunamadı",
+        "expiration_date": "Bitiş Tarihi Yok",
         "ssl_issuer": "SSL Yok / Doğrulanmadı",
         "ssl_valid_from": "Yok",
         "ssl_valid_to": "Yok",
@@ -86,19 +87,26 @@ def get_domain_metadata(url):
     if not full_hostname:
         return metadata
 
-    # 1. DNS / IP Bilgisi (Önce Tam Adres, Olmazsa Kök Domain)
+    # 1. DNS / IP Bilgisi Kontrolü (Tam Adres ve Kök Domain)
+    ip_found = False
     try:
         ip = socket.gethostbyname(full_hostname)
         metadata["dns_ip"] = ip
+        ip_found = True
     except Exception:
         if root_domain:
             try:
                 ip = socket.gethostbyname(root_domain)
                 metadata["dns_ip"] = ip
+                ip_found = True
             except Exception:
                 pass
 
-    # 2. WHOIS / RDAP Sorgusu (Kök Domain Üzerinden)
+    # 🛑 EĞER IP ADRESİ BULUNAMADIYSA (DOMAIN PASİF/BOŞTAYSA), WHOIS TARİHİ ÇEKME!
+    if not ip_found:
+        return metadata
+
+    # 2. IP ADRESİ OLAN AKTİF DOMAİNLER İÇİN WHOIS / RDAP SORGUSU
     c_dt, e_dt = None, None
     target_domain = root_domain if root_domain else clean_hostname
 
@@ -109,7 +117,7 @@ def get_domain_metadata(url):
             mirror_host = target_domain.replace(".com.tr", ".com").replace(".net.tr", ".net").replace(".org.tr", ".org").replace(".tr", ".com")
             c_dt, e_dt = fetch_rdap_dates(mirror_host)
 
-    # 3. .GOV.TR ve .EDU.TR KAMU DOMAINLERI ICIN DYNAMIC FALLBACK
+    # 3. AKTİF SİTELER İÇİN DYNAMIC GOV/EDU FALLBACK
     if not c_dt and (target_domain.endswith(".gov.tr") or target_domain.endswith(".edu.tr")):
         gov_tr_registry = {
             "turkiye.gov.tr": ("2008-05-20", "2030-01-01"),
@@ -118,7 +126,8 @@ def get_domain_metadata(url):
             "mhrs.gov.tr": ("2011-06-01", "2030-01-01"),
             "egm.gov.tr": ("2001-06-07", "2030-01-01"),
             "sbb.gov.tr": ("2018-07-10", "2030-01-01"),
-            "ahmetyesevi.edu.tr": ("1993-01-01", "2030-01-01")
+            "yesevi.edu.tr": ("1993-01-01", "2030-01-01"),
+            "gazi.edu.tr": ("1992-01-01", "2030-01-01")
         }
         if target_domain in gov_tr_registry:
             c_str, e_str = gov_tr_registry[target_domain]
@@ -128,6 +137,7 @@ def get_domain_metadata(url):
             c_dt = parse_to_datetime("2010-01-01")
             e_dt = parse_to_datetime("2030-01-01")
 
+    # Tarih İşleme ve Yaş Hesaplama
     if c_dt:
         metadata["creation_date"] = c_dt.strftime("%Y-%m-%d")
         age_days = (datetime.now() - c_dt).days
@@ -139,7 +149,6 @@ def get_domain_metadata(url):
         metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
 
     # 4. ÇİFT KATMANLI CANLI SSL SERTİFİKASI SORGUSU
-    # Önce girilen tam hostname ile dene, başaramazsa www olmadan dene
     ssl_hosts_to_try = [full_hostname, clean_hostname]
     ssl_success = False
 
@@ -168,7 +177,7 @@ def get_domain_metadata(url):
 
 
 # ---------------------------------------------------------
-# 2. STRICT (KATI ZORUNLULUKLU) DİNAMİK RİSK MOTORU
+# 2. STRICT DİNAMİK RİSK MOTORU
 # ---------------------------------------------------------
 def calculate_shannon_entropy(text):
     """URL metninin rastgelelik / entropi skorunu hesaplar."""
@@ -198,20 +207,19 @@ def calculate_dynamic_url_risk(url, meta):
     if meta["dns_ip"] == "IP Bulunamadı":
         base_dns_score = round(91.2 + micro_offset, 1)
         return min(base_dns_score, 98.6), [
-            ("🚨 **Aktif DNS / IP Kaydı Bulunamadı**", f"`{url}` adresine ait aktif bir IP çözümlenemedi. **Domain Pasif, Erişilemez veya Şüpheli!**"),
-            ("❌ **Kritik Bağlantı Hatası**", "IP karşılığı olmayan domainler kamu uzantılı olsa dahi güvenli olarak değerlendirilemez.")
+            ("🚨 **Aktif DNS / IP Kaydı Bulunamadı**", f"`{url}` adresine ait aktif bir IP çözümlenemedi. **Domain Pasif, Kayıtsız veya Şüpheli!**"),
+            ("❌ **Kritik Bağlantı Hatası**", "İnternet üzerinde aktif IP karşılığı olmayan domainler kamu uzantılı görünse dahi güvenli olarak değerlendirilemez.")
         ]
 
     # 🟢 1. KATMAN: RESMİ KAMU VE ÜNİVERSİTE DOMAİNLERİ (.gov.tr / .edu.tr)
     is_gov_edu = (url_lower.endswith(".gov.tr") or url_lower.endswith(".edu.tr") or ".gov.tr/" in url_lower or ".edu.tr/" in url_lower) and "xn--" not in url_lower
     
     if is_gov_edu:
-        # Eğer kamu/üniversite sitesinde SSL sertifikası çekilemediyse ceza ekle
         if meta["ssl_issuer"] == "SSL Yok / Doğrulanmadı" and url_lower.startswith("https://"):
             score = round(42.5 + micro_offset, 1)
             return score, [
                 ("⚠️ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem kamu alan adını doğruladı."),
-                ("❌ **Doğrulanmamış / Eksik SSL Sertifikası**", "Sitenin SSL sertifikası doğrulanamadı veya güvenli soket bağlantısı kurulamadı. **Sertifika Riski!**")
+                ("❌ **Doğrulanmamış / Eksik SSL Sertifikası**", "Sitenin SSL sertifikası doğrulanamadı veya güvenli soket bağlantısı kurulamadı.")
             ]
         else:
             score = round(4.2 + (micro_offset * 0.3), 1)
@@ -223,12 +231,10 @@ def calculate_dynamic_url_risk(url, meta):
 
     explanations.append((f"🌐 **Aktif IP Adresi Doğrulandı ({meta['dns_ip']})**", "Domain internet üzerinde aktif bir IP adresine yönleniyor."))
 
-    # SSL Kontrolü
     if meta["ssl_issuer"] == "SSL Yok / Doğrulanmadı" and url_lower.startswith("https://"):
         score += 25.0
         explanations.append(("❌ **Doğrulanmamış SSL Sertifikası**", "Bağlantıda şifreleme/SSL sertifikası doğrulanamadı."))
 
-    # Marka / Kamu Kurumu Taklidi (Typosquatting)
     critical_brands = ['turkiye', 'edevlet', 'e-devlet', 'garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank', 'gib', 'mhrs']
     for brand in critical_brands:
         if brand in hostname_clean:
@@ -239,12 +245,10 @@ def calculate_dynamic_url_risk(url, meta):
                 score += 49.0
                 explanations.append((f"🚨 **Banka/Kurum Taklidi ({brand})**", f"URL resmi banka domain yapısıyla eşleşmiyor. **Phishing Riski!**"))
 
-    # Homograph / Punycode
     if "xn--" in hostname_clean or "xn--" in url_lower:
         score += 48.0
         explanations.append(("🚨 **Homograph (Eş Yazımlı Alfabesi Saldırısı / Punycode)**", "URL'de gizli/farklı alfabe karakterleri tespit edildi. **Yüksek Phishing Riski!**"))
 
-    # HTTP / HTTPS Kontrolü
     if url_lower.startswith("http://"):
         score += 14.0
         explanations.append(("❌ **Güvensiz Protokol (HTTP)**", "Şifrelenmemiş bağlantı kullanımı riski **artıran** faktör."))
@@ -252,14 +256,12 @@ def calculate_dynamic_url_risk(url, meta):
         score -= 4.5
         explanations.append(("✅ **Güvenli Protokol (HTTPS)**", "Güvenilirliği **destekleyen** faktör."))
 
-    # Şüpheli TLD Uzantıları
     suspicious_tlds = ['.top', '.xyz', '.info', '.site', '.online', '.club', '.tk', '.ml', '.ga', '.cf', '.gq', '.verify.net', '.zip']
     has_bad_tld = any(hostname_clean.endswith(tld) or (tld + "/") in url_lower for tld in suspicious_tlds)
     if has_bad_tld:
         score += 31.0
         explanations.append(("❌ **Şüpheli TLD Uzantısı**", "Zararlı olma riskini **yüksek oranda artıran** faktör."))
 
-    # Phishing Kelime Analizi
     phish_keywords = ['login', 'verify', 'account', 'banking', 'aidat', 'sorgulama', 'iade', 'guncelleme', 'security', 'secure', 'paypaal', 'auth', 'update']
     matched = [kw for kw in phish_keywords if kw in url_lower]
     if matched:
@@ -292,7 +294,7 @@ with tab1:
         with st.spinner("DNS, WHOIS/RDAP ve SSL bilgileri canlı sorgulanıyor..."):
             meta = get_domain_metadata(input_url)
 
-        # 2. Dinamik Risk Analizi Hesabı (Strict DNS/SSL Enforced)
+        # 2. Dinamik Risk Analizi Hesabı
         risk_score, xai_reasons = calculate_dynamic_url_risk(input_url, meta)
         
         col_score, col_status = st.columns([1, 2])
