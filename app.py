@@ -6,6 +6,7 @@ import ssl
 from datetime import datetime
 import whois
 import urllib.parse
+import re
 
 # Page Setup
 st.set_page_config(
@@ -18,8 +19,62 @@ st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
 st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
 
 # ---------------------------------------------------------
-# 1. YARDIMCI FONKSİYONLAR (WHOIS, DNS & SSL)
+# 1. YARDIMCI FONKSİYONLAR (RİSK DİNAMİK HESAPLAMA)
 # ---------------------------------------------------------
+def calculate_url_risk(url):
+    """
+    URL dinamik öznitelik analizi ve heuristik risk puanlama
+    """
+    url_lower = url.lower()
+    score = 15.0  # Baz risk puanı
+    explanations = []
+
+    # 1. Uzantı (TLD) Kontrolü
+    suspicious_tlds = ['.top', '.xyz', '.info', '.site', '.online', '.club', '.tk', '.ml', '.ga', '.cf', '.gq', '.verify.net']
+    if any(url_lower.endswith(tld) or (tld + "/") in url_lower for tld in suspicious_tlds):
+        score += 35.0
+        explanations.append(("❌ **Şüpheli TLD Uzantısı**", "Zararlı olma riskini **yüksek oranda artıran** faktör."))
+    else:
+        explanations.append(("✅ **Güvenilir TLD Uzantısı**", "Güvenilirliği **destekleyen** faktör."))
+
+    # 2. Phishing Kelimeleri
+    phish_keywords = ['login', 'verify', 'account', 'banking', 'aidat', 'sorgulama', 'iade', 'guncelleme', 'security', 'secure', 'e-devlet', 'garanti', 'ziraat', 'paypaal']
+    matched_keywords = [kw for kw in phish_keywords if kw in url_lower]
+    if len(matched_keywords) > 0 and not (".gov.tr" in url_lower or "google.com" in url_lower or "garantibbva.com.tr" in url_lower or "github.com" in url_lower):
+        score += len(matched_keywords) * 15.0
+        explanations.append((f"❌ **Şüpheli Kelime Dizesi ({', '.join(matched_keywords)})**", "Zararlı olma riskini **artıran** faktör."))
+
+    # 3. IP Adresi Kullanımı
+    ip_pattern = r'https?://(?:\d{1,3}\.){3}\d{1,3}'
+    if re.search(ip_pattern, url_lower):
+        score += 40.0
+        explanations.append(("❌ **Doğrudan IP Adresi Kullanımı**", "Zararlı olma riskini **çok yüksek oranda artıran** faktör."))
+
+    # 4. Tire (-) Sayısı
+    dash_count = url_lower.count('-')
+    if dash_count > 2:
+        score += dash_count * 5.0
+        explanations.append((f"❌ **Yüksek Tire (-) Sayısı ({dash_count})**", "Zararlı olma riskini **artıran** faktör."))
+    else:
+        explanations.append((f"✅ **Tire (-) Sayısı ({dash_count})**", "Güvenilirliği **destekleyen** faktör."))
+
+    # 5. URL Uzunluğu
+    if len(url) > 50:
+        score += 15.0
+        explanations.append((f"❌ **Uzun URL Yapısı ({len(url)} karakter)**", "Zararlı olma riskini **artıran** faktör."))
+    else:
+        explanations.append((f"✅ **Kısa/Standart URL ({len(url)} karakter)**", "Güvenilirliği **destekleyen** faktör."))
+
+    # 6. Resmi Domain İndirimi
+    if ".gov.tr" in url_lower or ".edu.tr" in url_lower:
+        score = 5.0
+        explanations = [("✅ **Resmi Kamu/Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Yüksek güvenilirlik faktörü.")]
+
+    # Puanı %0 - %99 arasında sınırla
+    final_score = round(min(max(score, 5.0), 98.5), 1)
+    return final_score, explanations
+
+
 def get_domain_metadata(url):
     """
     URL adresi üzerinden DNS/IP, WHOIS domain yaşı ve SSL sertifikası
@@ -27,7 +82,7 @@ def get_domain_metadata(url):
     """
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.netloc or parsed.path
-    hostname = hostname.split(':')[0]  # Port numarasını temizle
+    hostname = hostname.split(':')[0]
     
     metadata = {
         "domain_age_days": "Bilinmiyor",
@@ -49,10 +104,9 @@ def get_domain_metadata(url):
     except Exception:
         pass
 
-    # 2. WHOIS Sorgusu (Gelişmiş Tarih Yakalama ve Fallback Yaş Hesaplama)
+    # 2. WHOIS Sorgusu
     try:
         w = whois.whois(hostname)
-        
         creation = w.creation_date
         if isinstance(creation, list) and len(creation) > 0:
             creation = creation[0]
@@ -61,7 +115,6 @@ def get_domain_metadata(url):
         if isinstance(expiration, list) and len(expiration) > 0:
             expiration = expiration[0]
 
-        # Creation Date İşleme
         creation_dt = None
         if creation:
             if isinstance(creation, datetime):
@@ -73,7 +126,6 @@ def get_domain_metadata(url):
                 except Exception:
                     pass
 
-        # Expiration Date İşleme
         expiration_dt = None
         if expiration:
             if isinstance(expiration, datetime):
@@ -85,7 +137,6 @@ def get_domain_metadata(url):
                 except Exception:
                     pass
 
-        # Metin Formatına Dönüştürme ve Yaş Hesaplama
         if creation_dt:
             metadata["creation_date"] = creation_dt.strftime("%Y-%m-%d")
             age = (datetime.now() - creation_dt).days
@@ -138,9 +189,8 @@ with tab1:
     if analyze_btn and input_url:
         st.subheader("📊 Analiz Çıktısı")
         
-        # Risk Skoru Mantığınız (Örnek/Canlı)
-        is_gov = ".gov.tr" in input_url or "turkiye.gov.tr" in input_url
-        risk_score = 15.0 if is_gov else 28.0
+        # Dinamik Risk Analizi Hesabı
+        risk_score, xai_reasons = calculate_url_risk(input_url)
         
         col_score, col_status = st.columns([1, 2])
         
@@ -158,15 +208,10 @@ with tab1:
 
         st.write("---")
         
-        # 💡 XAI AÇIKLAMA KARTI
+        # 💡 DİNAMİK XAI AÇIKLAMA KARTI
         st.subheader("💡 Neden Bu Karar Verildi? (XAI Açıklama Kartı)")
-        st.markdown("""
-        * ❌ **Tire (-) Sayısı** (Değer: `0.0`): Zararlı olma riskini **artıran** faktör.
-        * ✅ **@ İşareti Kullanımı** (Değer: `0.0`): Güvenilirliği **destekleyen** faktör.
-        * ✅ **hostname_length** (Değer: `18.0`): Güvenilirliği **destekleyen** faktör.
-        * ❌ **URL Metin Uzunluğu** (Değer: `27.0`): Zararlı olma riskini **artıran** faktör.
-        * ❌ **count_equal** (Değer: `0.0`): Zararlı olma riskini **artıran** faktör.
-        """)
+        for title, desc in xai_reasons:
+            st.markdown(f"* {title}: {desc}")
 
         st.write("---")
 
