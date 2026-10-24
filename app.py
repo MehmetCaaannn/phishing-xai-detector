@@ -49,22 +49,45 @@ def get_domain_metadata(url):
     except Exception:
         pass
 
-    # 2. WHOIS Sorgusu
+    # 2. WHOIS Sorgusu (Gelişmiş Tarih Yakalama)
     try:
         w = whois.whois(hostname)
+        
+        # Creation Date (Kayıt Tarihi)
         creation = w.creation_date
-        if isinstance(creation, list):
+        if isinstance(creation, list) and len(creation) > 0:
             creation = creation[0]
+            
+        # Expiration Date (Bitiş Tarihi)
         expiration = w.expiration_date
-        if isinstance(expiration, list):
+        if isinstance(expiration, list) and len(expiration) > 0:
             expiration = expiration[0]
             
-        if creation and isinstance(creation, datetime):
-            metadata["creation_date"] = creation.strftime("%Y-%m-%d")
-            age = (datetime.now() - creation).days
-            metadata["domain_age_days"] = f"{age} Gün"
-        if expiration and isinstance(expiration, datetime):
-            metadata["expiration_date"] = expiration.strftime("%Y-%m-%d")
+        # Tarih İşleme ve Yaş Hesaplama
+        if creation:
+            if isinstance(creation, datetime):
+                metadata["creation_date"] = creation.strftime("%Y-%m-%d")
+                age = (datetime.now() - creation).days
+                if age > 0:
+                    metadata["domain_age_days"] = f"{age} Gün ({round(age/365, 1)} Yıl)"
+            else:
+                metadata["creation_date"] = str(creation).split()[0]
+
+        if expiration:
+            if isinstance(expiration, datetime):
+                metadata["expiration_date"] = expiration.strftime("%Y-%m-%d")
+            else:
+                metadata["expiration_date"] = str(expiration).split()[0]
+
+        # Eğer creation_date oluştu ama age hesaplanamadıysa yedek hesaplama
+        if metadata["creation_date"] != "Bilinmiyor" and metadata["domain_age_days"] == "Bilinmiyor":
+            try:
+                c_dt = datetime.strptime(metadata["creation_date"], "%Y-%m-%d")
+                age = (datetime.now() - c_dt).days
+                metadata["domain_age_days"] = f"{age} Gün ({round(age/365, 1)} Yıl)"
+            except Exception:
+                pass
+
     except Exception:
         pass
 
