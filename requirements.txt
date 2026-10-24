@@ -10,3 +10,4 @@ seaborn
 python-whois
 tldextract
 requests
+python-whois
