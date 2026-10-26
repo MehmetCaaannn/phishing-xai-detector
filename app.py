@@ -22,63 +22,107 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Enterprise Cyber Security CSS
+# Custom Enterprise Cyber Security CSS (Next-Gen UI)
 st.markdown("""
     <style>
-    /* Main Background & Font Styling */
+    /* Global Page Styling */
     .main {
         background-color: #0d1117;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     
     /* Header Container */
     .header-box {
-        padding: 24px;
+        padding: 24px 30px;
         background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
         border: 1px solid #30363d;
-        border-radius: 8px;
+        border-radius: 10px;
         margin-bottom: 24px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
     }
     .header-title {
         color: #f0f6fc;
         font-size: 26px;
         font-weight: 700;
-        margin-bottom: 6px;
         letter-spacing: -0.5px;
+        margin-bottom: 4px;
     }
     .header-subtitle {
         color: #8b949e;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 400;
         margin: 0;
     }
 
-    /* Professional Metric Card Styles */
+    /* Professional Card Containers */
+    .soc-card {
+        background-color: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    /* Status Badges */
+    .badge-critical {
+        background-color: rgba(248, 81, 73, 0.15);
+        color: #f85149;
+        border: 1px solid rgba(248, 81, 73, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .badge-warning {
+        background-color: rgba(210, 153, 34, 0.15);
+        color: #d29922;
+        border: 1px solid rgba(210, 153, 34, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .badge-secure {
+        background-color: rgba(46, 160, 67, 0.15);
+        color: #3fb950;
+        border: 1px solid rgba(46, 160, 67, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* Metric Override */
     div[data-testid="stMetricValue"] {
-        font-size: 20px !important;
+        font-size: 18px !important;
         font-weight: 600 !important;
         color: #58a6ff !important;
     }
     div[data-testid="stMetricLabel"] {
-        font-size: 13px !important;
+        font-size: 12px !important;
         color: #8b949e !important;
         font-weight: 500 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
-    /* Tabs Customisation */
+    /* Custom Streamlit Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+        gap: 6px;
         border-bottom: 1px solid #30363d;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 44px;
-        padding-left: 20px;
-        padding-right: 20px;
+        height: 42px;
+        padding-left: 18px;
+        padding-right: 18px;
         background-color: transparent;
         border-radius: 6px 6px 0px 0px;
         color: #8b949e;
         font-weight: 500;
-        font-size: 14px;
+        font-size: 13px;
     }
     .stTabs [aria-selected="true"] {
         background-color: #161b22 !important;
@@ -86,7 +130,7 @@ st.markdown("""
         border-bottom: 2px solid #58a6ff !important;
     }
     
-    /* Primary Action Button */
+    /* Action Button Styling */
     .stButton > button {
         background-color: #238636;
         color: #ffffff;
@@ -100,6 +144,16 @@ st.markdown("""
         background-color: #2ea043;
         border-color: #8b949e;
     }
+    
+    /* Section Titles */
+    .section-header {
+        color: #c9d1d9;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -108,7 +162,7 @@ st.markdown("""
 # ---------------------------------------------------------
 st.markdown("""
     <div class="header-box">
-        <div class="header-title">Phishing & Zararlı URL Tespit Sistemi</div>
+        <div class="header-title">ThreatIntel | Zararlı URL & Phishing Analiz Motoru</div>
         <div class="header-subtitle">Açıklanabilir Yapay Zeka (XAI) ve Sezgisel Analiz Destekli Siber Tehdit Analiz Paneli</div>
     </div>
 """, unsafe_allow_html=True)
@@ -122,9 +176,13 @@ if 'last_risk_score' not in st.session_state:
     st.session_state['last_risk_score'] = None
 if 'last_shap_values' not in st.session_state:
     st.session_state['last_shap_values'] = None
+if 'last_meta' not in st.session_state:
+    st.session_state['last_meta'] = None
+if 'last_reasons' not in st.session_state:
+    st.session_state['last_reasons'] = None
 
 # ---------------------------------------------------------
-# 1. GELİŞMİŞ UZUN SUBDOMAIN UYUMLU METADATA & SSL MOTORU
+# 1. METADATA & DNS KONTROLLÜ WHOIS MOTORU
 # ---------------------------------------------------------
 def parse_to_datetime(date_val):
     if not date_val:
@@ -164,7 +222,7 @@ def fetch_rdap_dates(domain_name):
 
 def get_domain_metadata(url):
     ext = tldextract.extract(url)
-    root_domain = ext.registered_domain  # Örn: kamuilan.sbb.gov.tr -> sbb.gov.tr
+    root_domain = ext.registered_domain
     
     parsed = urllib.parse.urlparse(url if url.startswith(('http://', 'https://')) else f'http://{url}')
     full_hostname = parsed.netloc or parsed.path
@@ -184,7 +242,6 @@ def get_domain_metadata(url):
     if not full_hostname:
         return metadata
 
-    # 1. IP Çözümleme Kontrolü
     ip_found = False
     try:
         ip = socket.gethostbyname(full_hostname)
@@ -202,7 +259,6 @@ def get_domain_metadata(url):
     if not ip_found:
         return metadata
 
-    # 2. RDAP / WHOIS Sorgusu
     c_dt, e_dt = None, None
     target_domain = root_domain if root_domain else clean_hostname
 
@@ -242,11 +298,9 @@ def get_domain_metadata(url):
     if e_dt:
         metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
 
-    # 3. 3-KATMANLI GELİŞMİŞ SSL SERTİFİKASI ÇEKİCİ (Uzun Subdomain Uyumlu)
     ssl_hosts_to_try = [full_hostname, root_domain, f"www.{root_domain}" if root_domain else None]
     ssl_hosts_to_try = [h for h in ssl_hosts_to_try if h]
     
-    # Mükerrer olanları sırasını bozmadan temizle
     seen = set()
     ssl_hosts_clean = []
     for h in ssl_hosts_to_try:
@@ -401,24 +455,22 @@ def calculate_dynamic_url_risk(url, meta):
 tab1, tab2, tab3 = st.tabs(["Canlı URL Analizi", "XAI & SHAP Katkı Analizi", "Model Başarım & Benchmark"])
 
 # =========================================================
-# TAB 1: CANLI URL ANALİZ PANELİ (Tek Tıklama Fixi Entegreli)
+# TAB 1: CANLI URL ANALİZ PANELİ (Enterprise SOC UX)
 # =========================================================
 with tab1:
-    st.markdown("##### URL Sorgulama ve Anlık Tehdit Değerlendirmesi")
+    st.markdown('<div class="section-header">URL Sorgulama ve Anlık Tehdit Değerlendirmesi</div>', unsafe_allow_html=True)
     
     col_in1, col_in2 = st.columns([4, 1])
     with col_in1:
-        # Arama kutusunu doğrudan st.session_state'e bağlayıp key verdik
         input_url = st.text_input(
             "Analiz Edilecek URL Adresi",
             key="url_input_field",
-            placeholder="https://example.com veya şüpheli bağlantı...",
+            placeholder="https://example.com veya şüpheli bağlantı giriniz...",
             label_visibility="collapsed"
         )
     with col_in2:
         analyze_btn = st.button("URL Analiz Et", use_container_width=True)
     
-    # Butona basıldığında veya Enter yapıldığında doğrudan girilen adresi sorgula
     if analyze_btn and input_url.strip():
         url_to_check = input_url.strip()
         with st.spinner("DNS, WHOIS/RDAP ve SSL sertifika verileri doğrulanıyor..."):
@@ -426,45 +478,67 @@ with tab1:
 
         risk_score, xai_reasons, local_shap = calculate_dynamic_url_risk(url_to_check, meta)
         
-        # Sonuçları oturum hafızasına yaz
         st.session_state['last_analyzed_url'] = url_to_check
         st.session_state['last_risk_score'] = risk_score
         st.session_state['last_shap_values'] = local_shap
         st.session_state['last_meta'] = meta
         st.session_state['last_reasons'] = xai_reasons
 
-    # Hafızada analiz sonucu varsa doğrudan ve anında ekrana bas (Re-render Fix)
+    # Analiz Sonuç Paneli Render
     if st.session_state['last_risk_score'] is not None:
         risk_score = st.session_state['last_risk_score']
         meta = st.session_state['last_meta']
         xai_reasons = st.session_state['last_reasons']
 
         st.write("")
+        
+        # Threat Score & Badge Card
         col_score, col_status = st.columns([1, 3])
         
         with col_score:
-            st.markdown("<p style='color: #8b949e; font-size: 13px; font-weight: 500; margin: 0;'>Tahmini Risk Skoru</p>", unsafe_allow_html=True)
-            st.markdown(f"<h1 style='color: #f0f6fc; margin: 0; font-size: 38px;'>%{risk_score}</h1>", unsafe_allow_html=True)
+            st.markdown("""
+                <div style="background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center;">
+                    <p style="color: #8b949e; font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 4px 0;">Tahmini Risk Skoru</p>
+                    <h1 style="color: #f0f6fc; margin: 0; font-size: 36px; font-weight: 700;">%{}</h1>
+                </div>
+            """.format(risk_score), unsafe_allow_html=True)
             
         with col_status:
             if risk_score < 40:
-                st.success("DÜŞÜK RİSK (Güvenli Bağlantı)")
+                badge_html = '<div class="badge-secure">SECURE &nbsp;|&nbsp; Düşük Risk Seviyesi (Güvenli Bağlantı)</div>'
+                bar_color = "#3fb950"
             elif risk_score < 70:
-                st.warning("ORTA RİSK (Şüpheli Bağlantı)")
+                badge_html = '<div class="badge-warning">WARNING &nbsp;|&nbsp; Orta Risk Seviyesi (Dikkatli Olunmalı)</div>'
+                bar_color = "#d29922"
             else:
-                st.error("YÜKSEK RİSK (Zararlı / Phishing URL)")
+                badge_html = '<div class="badge-critical">CRITICAL &nbsp;|&nbsp; Yüksek Risk Seviyesi (Zararlı / Phishing)</div>'
+                bar_color = "#f85149"
+                
+            st.markdown(f"""
+                <div style="background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; height: 100%;">
+                    <p style="color: #8b949e; font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 8px 0;">Tehdit Değerlendirmesi</p>
+                    {badge_html}
+                    <div style="width: 100%; background-color: #21262d; height: 6px; border-radius: 3px; margin-top: 14px; overflow: hidden;">
+                        <div style="width: {risk_score}%; background-color: {bar_color}; height: 100%;"></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-        st.markdown("<hr style='border: 0.5px solid #30363d; margin: 20px 0;'>", unsafe_allow_html=True)
+        st.write("")
+
+        # XAI Explanation Section
+        st.markdown('<div class="section-header">Karar Gerekçeleri (XAI Açıklama Kartı)</div>', unsafe_allow_html=True)
         
-        # XAI Explanation Cards
-        st.markdown("##### Karar Gerekçeleri (XAI Açıklama Kartı)")
+        reasons_html = '<div style="background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">'
         for title, desc in xai_reasons:
-            st.markdown(f"• **{title}:** {desc}")
+            reasons_html += f'<div style="margin-bottom: 8px; font-size: 13px; color: #c9d1d9;"><span style="color: #58a6ff; font-weight: 600;">{title}:</span> {desc}</div>'
+        reasons_html += '</div>'
+        st.markdown(reasons_html, unsafe_allow_html=True)
 
-        st.markdown("<hr style='border: 0.5px solid #30363d; margin: 20px 0;'>", unsafe_allow_html=True)
+        st.write("")
 
-        # Metadata Metrics
-        st.markdown("##### Domain & SSL Altyapı Metrikleri")
+        # Metadata Grid Section
+        st.markdown('<div class="section-header">Domain & SSL Altyapı Metrikleri</div>', unsafe_allow_html=True)
 
         m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
@@ -488,7 +562,7 @@ with tab1:
 # TAB 2: DİNAMİK SHAP ANALİZİ
 # =========================================================
 with tab2:
-    st.markdown("##### Açıklanabilir Yapay Zeka (XAI) & SHAP Karar Mekanizması")
+    st.markdown('<div class="section-header">Açıklanabilir Yapay Zeka (XAI) & SHAP Karar Mekanizması</div>', unsafe_allow_html=True)
     
     current_url = st.session_state['last_analyzed_url']
     current_risk = st.session_state['last_risk_score']
@@ -497,14 +571,14 @@ with tab2:
     if current_url and current_shap:
         st.markdown(f"""
             <div style="background-color: #161b22; padding: 12px 16px; border-radius: 6px; border: 1px solid #30363d; margin-bottom: 20px; font-size: 13px; color: #c9d1d9;">
-                <b>İncelenen Hedef:</b> <code>{current_url}</code> &nbsp;|&nbsp; <b>Model Risk Skoru:</b> <span style="color:#58a6ff;">%{current_risk}</span>
+                <b>İncelenen Hedef:</b> <code>{current_url}</code> &nbsp;|&nbsp; <b>Model Risk Skoru:</b> <span style="color:#58a6ff; font-weight:600;">%{current_risk}</span>
             </div>
         """, unsafe_allow_html=True)
 
         col_shap1, col_shap2 = st.columns([3, 2])
         
         with col_shap1:
-            st.markdown("###### Local SHAP Katkı Değerleri")
+            st.markdown('<div class="section-header">Local SHAP Katkı Değerleri</div>', unsafe_allow_html=True)
             
             shap_df = pd.DataFrame(list(current_shap.items()), columns=['Öznitelik', 'SHAP_Değeri']).sort_values(by='SHAP_Değeri')
             colors = ['#f85149' if x > 0 else '#388bfd' for x in shap_df['SHAP_Değeri']]
@@ -527,7 +601,7 @@ with tab2:
             st.pyplot(fig_shap)
 
         with col_shap2:
-            st.markdown("###### Öznitelik Karar Matrisi")
+            st.markdown('<div class="section-header">Öznitelik Karar Matrisi</div>', unsafe_allow_html=True)
             
             matrix_data = []
             for feat, val in sorted(current_shap.items(), key=lambda item: item[1], reverse=True):
@@ -548,7 +622,7 @@ with tab2:
 # TAB 3: MODEL BENCHMARK & PERFORMANS
 # =========================================================
 with tab3:
-    st.markdown("##### Model Karşılaştırma Benchmark & Başarım Metrikleri")
+    st.markdown('<div class="section-header">Model Karşılaştırma Benchmark & Başarım Metrikleri</div>', unsafe_allow_html=True)
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric(label="Accuracy (Doğruluk)", value="%98.4", delta="XGBoost")
@@ -556,12 +630,12 @@ with tab3:
     m3.metric(label="Recall (Duyarlılık)", value="%98.7", delta="XGBoost")
     m4.metric(label="F1-Score (Denge)", value="%98.4", delta="XGBoost")
 
-    st.markdown("<hr style='border: 0.5px solid #30363d; margin: 20px 0;'>", unsafe_allow_html=True)
+    st.write("")
 
     col_bench1, col_bench2 = st.columns(2)
 
     with col_bench1:
-        st.markdown("###### Algoritma Başarım Karşılaştırması")
+        st.markdown('<div class="section-header">Algoritma Başarım Karşılaştırması</div>', unsafe_allow_html=True)
         bench_df = pd.DataFrame({
             'Algoritma': ['XGBoost (Seçilen)', 'LightGBM', 'Random Forest', 'Decision Tree'],
             'Accuracy': [0.984, 0.978, 0.965, 0.921],
@@ -572,7 +646,7 @@ with tab3:
         st.dataframe(bench_df, use_container_width=True)
 
     with col_bench2:
-        st.markdown("###### XGBoost Confusion Matrix")
+        st.markdown('<div class="section-header">XGBoost Confusion Matrix</div>', unsafe_allow_html=True)
         
         cm = np.array([[4920, 80], [65, 4935]])
         fig_cm, ax_cm = plt.subplots(figsize=(6, 3.5))
