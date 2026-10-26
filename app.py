@@ -13,163 +13,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ---------------------------------------------------------
-# Page Configuration & Professional Styling
+# Page Configuration
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="ThreatIntel | Phishing & Malicious URL Engine",
-    page_icon="🔒",
+    page_title="Phishing & Zararlı URL Tespit Sistemi",
+    page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom Enterprise Cyber Security CSS (Next-Gen UI)
-st.markdown("""
-    <style>
-    /* Global Page Styling */
-    .main {
-        background-color: #0d1117;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    
-    /* Header Container */
-    .header-box {
-        padding: 24px 30px;
-        background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
-        border: 1px solid #30363d;
-        border-radius: 10px;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-    }
-    .header-title {
-        color: #f0f6fc;
-        font-size: 26px;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-        margin-bottom: 4px;
-    }
-    .header-subtitle {
-        color: #8b949e;
-        font-size: 13px;
-        font-weight: 400;
-        margin: 0;
-    }
-
-    /* Professional Card Containers */
-    .soc-card {
-        background-color: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-    
-    /* Status Badges */
-    .badge-critical {
-        background-color: rgba(248, 81, 73, 0.15);
-        color: #f85149;
-        border: 1px solid rgba(248, 81, 73, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        display: inline-block;
-    }
-    .badge-warning {
-        background-color: rgba(210, 153, 34, 0.15);
-        color: #d29922;
-        border: 1px solid rgba(210, 153, 34, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        display: inline-block;
-    }
-    .badge-secure {
-        background-color: rgba(46, 160, 67, 0.15);
-        color: #3fb950;
-        border: 1px solid rgba(46, 160, 67, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-weight: 600;
-        display: inline-block;
-    }
-
-    /* Metric Override */
-    div[data-testid="stMetricValue"] {
-        font-size: 18px !important;
-        font-weight: 600 !important;
-        color: #58a6ff !important;
-    }
-    div[data-testid="stMetricLabel"] {
-        font-size: 12px !important;
-        color: #8b949e !important;
-        font-weight: 500 !important;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* Custom Streamlit Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
-        border-bottom: 1px solid #30363d;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 42px;
-        padding-left: 18px;
-        padding-right: 18px;
-        background-color: transparent;
-        border-radius: 6px 6px 0px 0px;
-        color: #8b949e;
-        font-weight: 500;
-        font-size: 13px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #161b22 !important;
-        color: #58a6ff !important;
-        border-bottom: 2px solid #58a6ff !important;
-    }
-    
-    /* Action Button Styling */
-    .stButton > button {
-        background-color: #238636;
-        color: #ffffff;
-        font-weight: 600;
-        border: 1px solid rgba(240, 246, 252, 0.1);
-        border-radius: 6px;
-        height: 44px;
-        transition: all 0.2s ease;
-    }
-    .stButton > button:hover {
-        background-color: #2ea043;
-        border-color: #8b949e;
-    }
-    
-    /* Section Titles */
-    .section-header {
-        color: #c9d1d9;
-        font-size: 14px;
-        font-weight: 600;
-        margin-bottom: 12px;
-        letter-spacing: 0.3px;
-        text-transform: uppercase;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# ---------------------------------------------------------
-# App Header
-# ---------------------------------------------------------
-st.markdown("""
-    <div class="header-box">
-        <div class="header-title">ThreatIntel | Zararlı URL & Phishing Analiz Motoru</div>
-        <div class="header-subtitle">Açıklanabilir Yapay Zeka (XAI) ve Sezgisel Analiz Destekli Siber Tehdit Analiz Paneli</div>
-    </div>
-""", unsafe_allow_html=True)
-
 # ---------------------------------------------------------
 # Session State Initialize
 # ---------------------------------------------------------
+if 'theme' not in st.session_state:
+    st.session_state['theme'] = 'dark'
+
 if 'last_analyzed_url' not in st.session_state:
     st.session_state['last_analyzed_url'] = ""
 if 'last_risk_score' not in st.session_state:
@@ -180,6 +38,172 @@ if 'last_meta' not in st.session_state:
     st.session_state['last_meta'] = None
 if 'last_reasons' not in st.session_state:
     st.session_state['last_reasons'] = None
+
+# ---------------------------------------------------------
+# Dynamic Theme Engine & Active Tab Fix
+# ---------------------------------------------------------
+is_dark = st.session_state['theme'] == 'dark'
+
+bg_main = "#0d1117" if is_dark else "#f6f8fa"
+bg_card = "#161b22" if is_dark else "#ffffff"
+border_color = "#30363d" if is_dark else "#d0d7de"
+text_primary = "#f0f6fc" if is_dark else "#1f2328"
+text_secondary = "#8b949e" if is_dark else "#656d76"
+btn_bg = "#238636" if is_dark else "#2da44e"
+btn_hover = "#2ea043" if is_dark else "#2c974b"
+
+st.markdown(f"""
+    <style>
+    /* Global Page Styling */
+    .main {{
+        background-color: {bg_main};
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }}
+    
+    /* Header Container */
+    .header-box {{
+        padding: 24px 30px;
+        background: {bg_card};
+        border: 1px solid {border_color};
+        border-radius: 10px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    }}
+    .header-title {{
+        color: {text_primary};
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        margin-bottom: 4px;
+    }}
+    .header-subtitle {{
+        color: {text_secondary};
+        font-size: 13px;
+        font-weight: 400;
+        margin: 0;
+    }}
+
+    /* Status Badges */
+    .badge-critical {{
+        background-color: rgba(248, 81, 73, 0.15);
+        color: #f85149;
+        border: 1px solid rgba(248, 81, 73, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }}
+    .badge-warning {{
+        background-color: rgba(210, 153, 34, 0.15);
+        color: #d29922;
+        border: 1px solid rgba(210, 153, 34, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }}
+    .badge-secure {{
+        background-color: rgba(46, 160, 67, 0.15);
+        color: #3fb950;
+        border: 1px solid rgba(46, 160, 67, 0.4);
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }}
+
+    /* Metric Override */
+    div[data-testid="stMetricValue"] {{
+        font-size: 18px !important;
+        font-weight: 600 !important;
+        color: #0969da !important;
+    }}
+    div[data-testid="stMetricLabel"] {{
+        font-size: 12px !important;
+        color: {text_secondary} !important;
+        font-weight: 500 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }}
+
+    /* Custom Streamlit Tabs (Kırmızı Çizgi Düzeltmesi) */
+    .stTabs [data-baseweb="tab-highlight"] {{
+        background-color: #0969da !important;
+    }}
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 6px;
+        border-bottom: 1px solid {border_color};
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        height: 42px;
+        padding-left: 18px;
+        padding-right: 18px;
+        background-color: transparent;
+        border-radius: 6px 6px 0px 0px;
+        color: {text_secondary};
+        font-weight: 500;
+        font-size: 13px;
+        border-bottom: 2px solid transparent !important;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background-color: {bg_card} !important;
+        color: #0969da !important;
+        border-bottom: 2px solid #0969da !important;
+    }}
+    
+    /* Action Button Styling */
+    .stButton > button {{
+        background-color: {btn_bg};
+        color: #ffffff;
+        font-weight: 600;
+        border: 1px solid rgba(240, 246, 252, 0.1);
+        border-radius: 6px;
+        height: 44px;
+        transition: all 0.2s ease;
+    }}
+    .stButton > button:hover {{
+        background-color: {btn_hover};
+        border-color: {text_secondary};
+    }}
+    
+    /* Section Titles */
+    .section-header {{
+        color: {text_primary};
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }}
+    </style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# Header & Theme Toggle Switcher
+# ---------------------------------------------------------
+col_head1, col_head2 = st.columns([5, 1])
+
+with col_head1:
+    st.markdown(f"""
+        <div class="header-box">
+            <div class="header-title">Phishing & Zararlı URL Tespit Sistemi</div>
+            <div class="header-subtitle">Açıklanabilir Yapay Zeka (XAI) ve Sezgisel Analiz Destekli Siber Tehdit Analiz Paneli</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col_head2:
+    st.write("")
+    if is_dark:
+        if st.button("☀️ Açık Tema", use_container_width=True):
+            st.session_state['theme'] = 'light'
+            st.rerun()
+    else:
+        if st.button("🌙 Koyu Tema", use_container_width=True):
+            st.session_state['theme'] = 'dark'
+            st.rerun()
 
 # ---------------------------------------------------------
 # 1. METADATA & DNS KONTROLLÜ WHOIS MOTORU
@@ -455,7 +479,7 @@ def calculate_dynamic_url_risk(url, meta):
 tab1, tab2, tab3 = st.tabs(["Canlı URL Analizi", "XAI & SHAP Katkı Analizi", "Model Başarım & Benchmark"])
 
 # =========================================================
-# TAB 1: CANLI URL ANALİZ PANELİ (Enterprise SOC UX)
+# TAB 1: CANLI URL ANALİZ PANELİ
 # =========================================================
 with tab1:
     st.markdown('<div class="section-header">URL Sorgulama ve Anlık Tehdit Değerlendirmesi</div>', unsafe_allow_html=True)
@@ -496,12 +520,12 @@ with tab1:
         col_score, col_status = st.columns([1, 3])
         
         with col_score:
-            st.markdown("""
-                <div style="background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center;">
-                    <p style="color: #8b949e; font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 4px 0;">Tahmini Risk Skoru</p>
-                    <h1 style="color: #f0f6fc; margin: 0; font-size: 36px; font-weight: 700;">%{}</h1>
+            st.markdown(f"""
+                <div style="background-color: {bg_card}; border: 1px solid {border_color}; border-radius: 8px; padding: 16px; text-align: center;">
+                    <p style="color: {text_secondary}; font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 4px 0;">Tahmini Risk Skoru</p>
+                    <h1 style="color: {text_primary}; margin: 0; font-size: 36px; font-weight: 700;">%{risk_score}</h1>
                 </div>
-            """.format(risk_score), unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
             
         with col_status:
             if risk_score < 40:
@@ -515,10 +539,10 @@ with tab1:
                 bar_color = "#f85149"
                 
             st.markdown(f"""
-                <div style="background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; height: 100%;">
-                    <p style="color: #8b949e; font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 8px 0;">Tehdit Değerlendirmesi</p>
+                <div style="background-color: {bg_card}; border: 1px solid {border_color}; border-radius: 8px; padding: 16px; height: 100%;">
+                    <p style="color: {text_secondary}; font-size: 11px; font-weight: 600; text-transform: uppercase; margin: 0 0 8px 0;">Tehdit Değerlendirmesi</p>
                     {badge_html}
-                    <div style="width: 100%; background-color: #21262d; height: 6px; border-radius: 3px; margin-top: 14px; overflow: hidden;">
+                    <div style="width: 100%; background-color: {border_color}; height: 6px; border-radius: 3px; margin-top: 14px; overflow: hidden;">
                         <div style="width: {risk_score}%; background-color: {bar_color}; height: 100%;"></div>
                     </div>
                 </div>
@@ -529,9 +553,9 @@ with tab1:
         # XAI Explanation Section
         st.markdown('<div class="section-header">Karar Gerekçeleri (XAI Açıklama Kartı)</div>', unsafe_allow_html=True)
         
-        reasons_html = '<div style="background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">'
+        reasons_html = f'<div style="background-color: {bg_card}; border: 1px solid {border_color}; border-radius: 8px; padding: 16px;">'
         for title, desc in xai_reasons:
-            reasons_html += f'<div style="margin-bottom: 8px; font-size: 13px; color: #c9d1d9;"><span style="color: #58a6ff; font-weight: 600;">{title}:</span> {desc}</div>'
+            reasons_html += f'<div style="margin-bottom: 8px; font-size: 13px; color: {text_primary};"><span style="color: #0969da; font-weight: 600;">{title}:</span> {desc}</div>'
         reasons_html += '</div>'
         st.markdown(reasons_html, unsafe_allow_html=True)
 
@@ -570,8 +594,8 @@ with tab2:
 
     if current_url and current_shap:
         st.markdown(f"""
-            <div style="background-color: #161b22; padding: 12px 16px; border-radius: 6px; border: 1px solid #30363d; margin-bottom: 20px; font-size: 13px; color: #c9d1d9;">
-                <b>İncelenen Hedef:</b> <code>{current_url}</code> &nbsp;|&nbsp; <b>Model Risk Skoru:</b> <span style="color:#58a6ff; font-weight:600;">%{current_risk}</span>
+            <div style="background-color: {bg_card}; padding: 12px 16px; border-radius: 6px; border: 1px solid {border_color}; margin-bottom: 20px; font-size: 13px; color: {text_primary};">
+                <b>İncelenen Hedef:</b> <code>{current_url}</code> &nbsp;|&nbsp; <b>Model Risk Skoru:</b> <span style="color:#0969da; font-weight:600;">%{current_risk}</span>
             </div>
         """, unsafe_allow_html=True)
 
@@ -584,18 +608,18 @@ with tab2:
             colors = ['#f85149' if x > 0 else '#388bfd' for x in shap_df['SHAP_Değeri']]
 
             fig_shap, ax_shap = plt.subplots(figsize=(7, 4.2))
-            fig_shap.patch.set_facecolor('#0d1117')
-            ax_shap.set_facecolor('#0d1117')
+            fig_shap.patch.set_facecolor(bg_card)
+            ax_shap.set_facecolor(bg_card)
             
             ax_shap.barh(shap_df['Öznitelik'], shap_df['SHAP_Değeri'], color=colors, height=0.55)
-            ax_shap.axvline(0, color='#8b949e', linestyle='--', linewidth=0.8)
+            ax_shap.axvline(0, color=text_secondary, linestyle='--', linewidth=0.8)
             
-            ax_shap.tick_params(colors='#c9d1d9', labelsize=9)
-            ax_shap.xaxis.label.set_color('#8b949e')
+            ax_shap.tick_params(colors=text_primary, labelsize=9)
+            ax_shap.xaxis.label.set_color(text_secondary)
             ax_shap.set_xlabel("SHAP Değeri (+ Kırmızı: Phishing Riski | - Mavi: Güvenilirlik)", fontsize=9)
             
             for spine in ax_shap.spines.values():
-                spine.set_color('#30363d')
+                spine.set_color(border_color)
                 
             plt.tight_layout()
             st.pyplot(fig_shap)
@@ -650,17 +674,17 @@ with tab3:
         
         cm = np.array([[4920, 80], [65, 4935]])
         fig_cm, ax_cm = plt.subplots(figsize=(6, 3.5))
-        fig_cm.patch.set_facecolor('#0d1117')
-        ax_cm.set_facecolor('#0d1117')
+        fig_cm.patch.set_facecolor(bg_card)
+        ax_cm.set_facecolor(bg_card)
         
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax_cm, cbar=False,
                     xticklabels=['Meşru', 'Phishing'],
                     yticklabels=['Meşru', 'Phishing'],
-                    annot_kws={"size": 11, "color": "#ffffff"})
+                    annot_kws={"size": 11, "color": text_primary})
         
-        ax_cm.tick_params(colors='#c9d1d9', labelsize=9)
+        ax_cm.tick_params(colors=text_primary, labelsize=9)
         for spine in ax_cm.spines.values():
-            spine.set_color('#30363d')
+            spine.set_color(border_color)
             
         plt.tight_layout()
         st.pyplot(fig_cm)
@@ -668,8 +692,8 @@ with tab3:
 # ---------------------------------------------------------
 # Footer
 # ---------------------------------------------------------
-st.markdown("""
-    <div style="margin-top: 40px; border-top: 1px solid #30363d; padding-top: 16px; text-align: center; color: #8b949e; font-size: 12px;">
+st.markdown(f"""
+    <div style="margin-top: 40px; border-top: 1px solid {border_color}; padding-top: 16px; text-align: center; color: {text_secondary}; font-size: 12px;">
         Ahmet Yesevi Üniversitesi - Bilgisayar Mühendisliği Yüksek Lisans Dönem Projesi
     </div>
 """, unsafe_allow_html=True)
