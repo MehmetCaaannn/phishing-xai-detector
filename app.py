@@ -12,18 +12,109 @@ import tldextract
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Page Setup
+# ---------------------------------------------------------
+# Page Configuration & Professional Styling
+# ---------------------------------------------------------
 st.set_page_config(
-    page_title="Phishing & Zararlı URL Tespit Sistemi",
-    page_icon="🛡️",
-    layout="wide"
+    page_title="ThreatIntel | Phishing & Malicious URL Engine",
+    page_icon="🔒",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-st.title("🛡️ Phishing & Zararlı URL Tespit Sistemi")
-st.caption("Açıklanabilir Yapay Zeka (XAI) Destekli Son Kullanıcı Analiz ve Performans Paneli")
+# Custom Enterprise Cyber Security CSS
+st.markdown("""
+    <style>
+    /* Main Background & Font Styling */
+    .main {
+        background-color: #0d1117;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    /* Header Container */
+    .header-box {
+        padding: 24px;
+        background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        margin-bottom: 24px;
+    }
+    .header-title {
+        color: #f0f6fc;
+        font-size: 26px;
+        font-weight: 700;
+        margin-bottom: 6px;
+        letter-spacing: -0.5px;
+    }
+    .header-subtitle {
+        color: #8b949e;
+        font-size: 14px;
+        font-weight: 400;
+        margin: 0;
+    }
+
+    /* Professional Metric Card Styles */
+    div[data-testid="stMetricValue"] {
+        font-size: 20px !important;
+        font-weight: 600 !important;
+        color: #58a6ff !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 13px !important;
+        color: #8b949e !important;
+        font-weight: 500 !important;
+    }
+
+    /* Tabs Customisation */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        border-bottom: 1px solid #30363d;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 44px;
+        padding-left: 20px;
+        padding-right: 20px;
+        background-color: transparent;
+        border-radius: 6px 6px 0px 0px;
+        color: #8b949e;
+        font-weight: 500;
+        font-size: 14px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #161b22 !important;
+        color: #58a6ff !important;
+        border-bottom: 2px solid #58a6ff !important;
+    }
+    
+    /* Primary Action Button */
+    .stButton > button {
+        background-color: #238636;
+        color: #ffffff;
+        font-weight: 600;
+        border: 1px solid rgba(240, 246, 252, 0.1);
+        border-radius: 6px;
+        height: 44px;
+        transition: all 0.2s ease;
+    }
+    .stButton > button:hover {
+        background-color: #2ea043;
+        border-color: #8b949e;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# Session State İle Canlı URL Analiz Hafızası (Sıfır Başlangıç)
+# App Header
+# ---------------------------------------------------------
+st.markdown("""
+    <div class="header-box">
+        <div class="header-title">Phishing & Zararlı URL Tespit Sistemi</div>
+        <div class="header-subtitle">Açıklanabilir Yapay Zeka (XAI) ve Sezgisel Analiz Destekli Siber Tehdit Analiz Paneli</div>
+    </div>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# Session State Initialize
 # ---------------------------------------------------------
 if 'last_analyzed_url' not in st.session_state:
     st.session_state['last_analyzed_url'] = ""
@@ -82,9 +173,9 @@ def get_domain_metadata(url):
     
     metadata = {
         "domain_age_days": "Kayıtsız / Pasif Domain",
-        "creation_date": "Kayıt Kaydı Bulunamadı",
+        "creation_date": "Kayıt Bulunamadı",
         "expiration_date": "Bitiş Tarihi Yok",
-        "ssl_issuer": "SSL Yok / Doğrulanmadı",
+        "ssl_issuer": "Doğrulanmadı",
         "ssl_valid_from": "Yok",
         "ssl_valid_to": "Yok",
         "dns_ip": "IP Bulunamadı"
@@ -209,16 +300,14 @@ def calculate_dynamic_url_risk(url, meta):
         'URL Uzunluğu ve Yapısı': 0.01
     }
 
-    # 0. KATMAN: DNS IP ADRESİ KONTROLÜ
     if meta["dns_ip"] == "IP Bulunamadı":
         base_dns_score = round(91.2 + micro_offset, 1)
         local_shap['DNS IP Varlık Durumu'] = +0.48
         return min(base_dns_score, 98.6), [
-            ("🚨 **Aktif DNS / IP Kaydı Bulunamadı**", f"`{url}` adresine ait aktif bir IP çözümlenemedi. **Domain Pasif, Kayıtsız veya Şüpheli!**"),
-            ("❌ **Kritik Bağlantı Hatası**", "İnternet üzerinde aktif IP karşılığı olmayan domainler kamu uzantılı görünse dahi güvenli olarak değerlendirilemez.")
+            ("[KRİTİK] Aktif DNS / IP Kaydı Bulunamadı", f"`{url}` alan adına ait aktif bir IP çözümlenemedi. Domain pasif veya geçersiz."),
+            ("[RİSK] Geçersiz Sunucu Karşılığı", "Aktif IP karşılığı olmayan adresler güvenlik doğrulamasından geçemez.")
         ], local_shap
 
-    # 1. KATMAN: RESMİ KAMU VE ÜNİVERSİTE DOMAİNLERİ
     is_gov_edu = (url_lower.endswith(".gov.tr") or url_lower.endswith(".edu.tr") or ".gov.tr/" in url_lower or ".edu.tr/" in url_lower) and "xn--" not in url_lower
     
     if is_gov_edu:
@@ -226,28 +315,27 @@ def calculate_dynamic_url_risk(url, meta):
         local_shap['DNS IP Varlık Durumu'] = -0.20
         local_shap['SSL / HTTPS Güvenliği'] = -0.18
         
-        if meta["ssl_issuer"] == "SSL Yok / Doğrulanmadı" and url_lower.startswith("https://"):
+        if meta["ssl_issuer"] == "Doğrulanmadı" and url_lower.startswith("https://"):
             score = round(42.5 + micro_offset, 1)
             local_shap['SSL / HTTPS Güvenliği'] = +0.28
             return score, [
-                ("⚠️ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem kamu alan adını doğruladı."),
-                ("❌ **Doğrulanmamış / Eksik SSL Sertifikası**", "Sitenin SSL sertifikası doğrulanamadı veya güvenli soket bağlantısı kurulamadı.")
+                ("[ONAYLI] Resmi Kamu / Eğitim Uzonatısı", "Alan adı doğrulanmış kurumsal uzantı taşıyor."),
+                ("[UYARI] SSL Sertifika Doğrulama Hatası", "Güvenli bağlantı (SSL) doğrulanamadı.")
             ], local_shap
         else:
             score = round(4.2 + (micro_offset * 0.3), 1)
-            return score, [("✅ **Resmi Kamu / Üniversite Alan Adı (.gov.tr / .edu.tr)**", "Sistem tarafından doğrulanmış yüksek güvenilirlikli devlet/eğitim kurumu.")], local_shap
+            return score, [("[ONAYLI] Resmi Kurumsal Uzantı (.gov.tr / .edu.tr)", "Doğrulanmış resmi kamu / üniversite altyapısı.")], local_shap
 
-    # 2. KATMAN: SEZGİSEL (HEURISTIC) & MARKA TAKLİDİ ANALİZİ
     score = 14.5 + micro_offset
     explanations = []
 
-    explanations.append((f"🌐 **Aktif IP Adresi Doğrulandı ({meta['dns_ip']})**", "Domain internet üzerinde aktif bir IP adresine yönleniyor."))
+    explanations.append((f"[BİLGİ] Aktif IP Çözümlendi ({meta['dns_ip']})", "Domain internet üzerinde aktif bir sunucuya yönleniyor."))
     local_shap['DNS IP Varlık Durumu'] = -0.12
 
-    if meta["ssl_issuer"] == "SSL Yok / Doğrulanmadı" and url_lower.startswith("https://"):
+    if meta["ssl_issuer"] == "Doğrulanmadı" and url_lower.startswith("https://"):
         score += 25.0
         local_shap['SSL / HTTPS Güvenliği'] = +0.25
-        explanations.append(("❌ **Doğrulanmamış SSL Sertifikası**", "Bağlantıda şifreleme/SSL sertifikası doğrulanamadı."))
+        explanations.append(("[UYARI] Doğrulanmayan SSL Sertifikası", "Baglantıda SSL/TLS şifrelemesi doğrulanamadı."))
 
     critical_brands = ['turkiye', 'edevlet', 'e-devlet', 'garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank', 'gib', 'mhrs']
     for brand in critical_brands:
@@ -255,39 +343,38 @@ def calculate_dynamic_url_risk(url, meta):
             if brand in ['turkiye', 'edevlet', 'e-devlet', 'gib', 'mhrs'] and not url_lower.endswith(".gov.tr"):
                 score += 54.0
                 local_shap['Marka Taklidi (Typosquatting)'] = +0.46
-                explanations.append((f"🚨 **Marka/Kamu Kurumu Taklidi ({brand})**", f"URL resmi kamu uzantısı (.gov.tr) taşımıyor! **Sahte/Taklit Domain Riski!**"))
+                explanations.append((f"[TEHDİT] Kamu Kurum Taklidi ({brand})", f"URL resmi kamu uzantısı (.gov.tr) taşımıyor. Sahte alan adı riski!"))
             elif brand in ['garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank'] and not any(hostname_clean.endswith(ok) for ok in [f"{brand}.com.tr", f"{brand}.com", f"{brand}bank.com.tr", f"{brand}bank.com", f"{brand}bbva.com.tr"]):
                 score += 49.0
                 local_shap['Marka Taklidi (Typosquatting)'] = +0.42
-                explanations.append((f"🚨 **Banka/Kurum Taklidi ({brand})**", f"URL resmi banka domain yapısıyla eşleşmiyor. **Phishing Riski!**"))
+                explanations.append((f"[TEHDİT] Finans / Banka Taklidi ({brand})", "Resmi banka domain yapısıyla eşleşmiyor. Olası Phishing!"))
 
     if "xn--" in hostname_clean or "xn--" in url_lower:
         score += 48.0
         local_shap['Punycode / Homograph'] = +0.47
-        explanations.append(("🚨 **Homograph (Eş Yazımlı Alfabesi Saldırısı / Punycode)**", "URL'de gizli/farklı alfabe karakterleri tespit edildi. **Yüksek Phishing Riski!**"))
+        explanations.append(("[TEHDİT] Punycode / Homograph Saldırısı", "URL dizesinde gizli/farklı alfabe karakterleri tespit edildi."))
 
     if url_lower.startswith("http://"):
         score += 14.0
         local_shap['SSL / HTTPS Güvenliği'] = +0.18
-        explanations.append(("❌ **Güvensiz Protokol (HTTP)**", "Şifrelenmemiş bağlantı kullanımı riski **artıran** faktör."))
+        explanations.append(("[RİSK] Güvensiz Protokol (HTTP)", "Veri aktarımı şifrelenmiyor."))
     elif url_lower.startswith("https://"):
         score -= 4.5
         local_shap['SSL / HTTPS Güvenliği'] = -0.10
-        explanations.append(("✅ **Güvenli Protokol (HTTPS)**", "Güvenilirliği **destekleyen** faktör."))
+        explanations.append(("[GÜVENLİ] HTTPS Protokolü", "Bağlantı şifreleme protokolü aktif."))
 
     suspicious_tlds = ['.top', '.xyz', '.info', '.site', '.online', '.club', '.tk', '.ml', '.ga', '.cf', '.gq', '.verify.net', '.zip']
     has_bad_tld = any(hostname_clean.endswith(tld) or (tld + "/") in url_lower for tld in suspicious_tlds)
     if has_bad_tld:
         score += 31.0
         local_shap['Şüpheli TLD (.top, .xyz vb.)'] = +0.32
-        explanations.append(("❌ **Şüpheli TLD Uzantısı**", "Zararlı olma riskini **yüksek oranda artıran** faktör."))
+        explanations.append(("[RİSK] Yüksek Riskli TLD Uzantısı", "Zararlı URL dağıtımlarında sık kullanılan alan adı uzantısı."))
 
     phish_keywords = ['login', 'verify', 'account', 'banking', 'aidat', 'sorgulama', 'iade', 'guncelleme', 'security', 'secure', 'paypaal', 'auth', 'update']
     matched = [kw for kw in phish_keywords if kw in url_lower]
     if matched:
         score += len(matched) * 13.5
-        local_shap['Phishing Kelime Varlığı'] = +0.26
-        explanations.append((f"❌ **Şüpheli Kelime Dizesi ({', '.join(matched)})**", "Zararlı olma riskini **artıran** faktör."))
+        explanations.append((f"[RİSK] Şüpheli Kelimesi Dizilimi ({', '.join(matched)})", "Oltalama temalı anahtar kelimeler tespit edildi."))
 
     if entropy > 4.2:
         local_shap['Metin Entropisi (Rastgelelik)'] = +0.19
@@ -297,28 +384,29 @@ def calculate_dynamic_url_risk(url, meta):
 
 
 # ---------------------------------------------------------
-# 3. SEKMELER / TABS
+# 3. SEKMELER / NAVIGATION
 # ---------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["🔍 Canlı URL Analiz Paneli", "📈 SHAP (XAI) Öznitelik Analizi", "📊 Model Benchmark & Performans"])
+tab1, tab2, tab3 = st.tabs(["Canlı URL Analizi", "XAI & SHAP Katkı Analizi", "Model Başarım & Benchmark"])
 
 # =========================================================
 # TAB 1: CANLI URL ANALİZ PANELİ
 # =========================================================
 with tab1:
-    st.subheader("URL Sorgulama ve Anlık Risk Değerlendirmesi")
+    st.markdown("##### URL Sorgulama ve Anlık Tehdit Değerlendirmesi")
     
-    input_url = st.text_input(
-        "Analiz Edilecek URL Adresini Giriniz:",
-        value=st.session_state['last_analyzed_url'],
-        placeholder="Örn: https://www.turkiye.gov.tr veya şüpheli URL..."
-    )
-    
-    analyze_btn = st.button("🚀 URL'yi Analiz Et", use_container_width=True)
+    col_in1, col_in2 = st.columns([4, 1])
+    with col_in1:
+        input_url = st.text_input(
+            "Analiz Edilecek URL Adresi",
+            value=st.session_state['last_analyzed_url'],
+            placeholder="https://example.com veya şüpheli bağlantı...",
+            label_visibility="collapsed"
+        )
+    with col_in2:
+        analyze_btn = st.button("URL Analiz Et", use_container_width=True)
     
     if analyze_btn and input_url:
-        st.subheader("📊 Analiz Çıktısı")
-        
-        with st.spinner("DNS, WHOIS/RDAP ve SSL bilgileri canlı sorgulanıyor..."):
+        with st.spinner("DNS, WHOIS/RDAP ve SSL sertifika verileri doğrulanıyor..."):
             meta = get_domain_metadata(input_url)
 
         risk_score, xai_reasons, local_shap = calculate_dynamic_url_risk(input_url, meta)
@@ -327,29 +415,32 @@ with tab1:
         st.session_state['last_risk_score'] = risk_score
         st.session_state['last_shap_values'] = local_shap
         
-        col_score, col_status = st.columns([1, 2])
+        st.write("")
+        col_score, col_status = st.columns([1, 3])
         
         with col_score:
-            st.write("Tahmini Risk Skor Puanı")
-            st.title(f"%{risk_score}")
+            st.markdown("<p style='color: #8b949e; font-size: 13px; font-weight: 500; margin: 0;'>Tahmini Risk Skoru</p>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='color: #f0f6fc; margin: 0; font-size: 38px;'>%{risk_score}</h1>", unsafe_allow_html=True)
             
         with col_status:
             if risk_score < 40:
-                st.success("✅ RİSK SEVİYESİ: DÜŞÜK (Güvenli Bağlantı)")
+                st.success("DÜŞÜK RİSK (Güvenli Bağlantı)")
             elif risk_score < 70:
-                st.warning("⚠️ RİSK SEVİYESİ: ORTA (Dikkatli Olunmalı)")
+                st.warning("ORTA RİSK (Şüpheli Bağlantı)")
             else:
-                st.error("🚨 RİSK SEVİYESİ: YÜKSEK (Zararlı / Phishing URL)")
+                st.error("YÜKSEK RİSK (Zararlı / Phishing URL)")
 
-        st.write("---")
+        st.markdown("<hr style='border: 0.5px solid #30363d; margin: 20px 0;'>", unsafe_allow_html=True)
         
-        st.subheader("💡 Neden Bu Karar Verildi? (XAI Açıklama Kartı)")
+        # XAI Explanation Cards
+        st.markdown("##### Karar Gerekçeleri (XAI Açıklama Kartı)")
         for title, desc in xai_reasons:
-            st.markdown(f"* {title}: {desc}")
+            st.markdown(f"• **{title}:** {desc}")
 
-        st.write("---")
+        st.markdown("<hr style='border: 0.5px solid #30363d; margin: 20px 0;'>", unsafe_allow_html=True)
 
-        st.subheader("🌐 Domain, WHOIS ve SSL Sertifika Detayları")
+        # Metadata Metrics
+        st.markdown("##### Domain & SSL Altyapı Metrikleri")
 
         m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
@@ -358,103 +449,129 @@ with tab1:
             st.metric(label="Domain Yaşı", value=str(meta["domain_age_days"]))
 
         with m_col2:
-            st.metric(label="Domain Kayıt Tarihi", value=str(meta["creation_date"]))
-            st.metric(label="Domain Bitiş Tarihi", value=str(meta["expiration_date"]))
+            st.metric(label="Kayıt Tarihi", value=str(meta["creation_date"]))
+            st.metric(label="Bitiş Tarihi", value=str(meta["expiration_date"]))
 
         with m_col3:
-            st.metric(label="SSL Sağlayıcı (Issuer)", value=str(meta["ssl_issuer"]))
+            st.metric(label="SSL Sağlayıcısı", value=str(meta["ssl_issuer"]))
 
         with m_col4:
-            st.metric(label="SSL Başlangıç Tarihi", value=str(meta["ssl_valid_from"]))
-            st.metric(label="SSL Bitiş Tarihi", value=str(meta["ssl_valid_to"]))
+            st.metric(label="SSL Başlangıç", value=str(meta["ssl_valid_from"]))
+            st.metric(label="SSL Bitiş", value=str(meta["ssl_valid_to"]))
 
 
 # =========================================================
-# TAB 2: %100 CANLI VE ANLIK GÜNCELLENEN SHAP (XAI) ANALİZİ
+# TAB 2: DİNAMİK SHAP ANALİZİ
 # =========================================================
 with tab2:
-    st.subheader("📈 Açıklanabilir Yapay Zeka (XAI) & Anlık SHAP Analizi")
+    st.markdown("##### Açıklanabilir Yapay Zeka (XAI) & SHAP Karar Mekanizması")
     
     current_url = st.session_state['last_analyzed_url']
     current_risk = st.session_state['last_risk_score']
     current_shap = st.session_state['last_shap_values']
 
     if current_url and current_shap:
-        st.info(f"👉 **Şu an İncelenen URL:** `{current_url}` | **Model Risk Tahmini:** **%{current_risk}**")
+        st.markdown(f"""
+            <div style="background-color: #161b22; padding: 12px 16px; border-radius: 6px; border: 1px solid #30363d; margin-bottom: 20px; font-size: 13px; color: #c9d1d9;">
+                <b>İncelenen Hedef:</b> <code>{current_url}</code> &nbsp;|&nbsp; <b>Model Risk Skoru:</b> <span style="color:#58a6ff;">%{current_risk}</span>
+            </div>
+        """, unsafe_allow_html=True)
 
-        col_shap1, col_shap2 = st.columns(2)
+        col_shap1, col_shap2 = st.columns([3, 2])
         
         with col_shap1:
-            st.markdown("### 🎯 Bu URL'ye Özel Local SHAP Karar Grafiği")
+            st.markdown("###### Local SHAP Katkı Değerleri")
             
             shap_df = pd.DataFrame(list(current_shap.items()), columns=['Öznitelik', 'SHAP_Değeri']).sort_values(by='SHAP_Değeri')
-            colors = ['#d62728' if x > 0 else '#1f77b4' for x in shap_df['SHAP_Değeri']]
+            colors = ['#f85149' if x > 0 else '#388bfd' for x in shap_df['SHAP_Değeri']]
 
-            fig_shap, ax_shap = plt.subplots(figsize=(8, 5))
-            ax_shap.barh(shap_df['Öznitelik'], shap_df['SHAP_Değeri'], color=colors)
-            ax_shap.axvline(0, color='gray', linestyle='--', linewidth=1)
-            ax_shap.set_xlabel("SHAP Katkı Değeri (+ Kırmızı: Phishing Riski | - Mavi: Güvenilirlik)")
-            ax_shap.set_title(f"Sorgulanan URL İçin Özelleştirilmiş SHAP Ağırlıkları")
+            fig_shap, ax_shap = plt.subplots(figsize=(7, 4.2))
+            fig_shap.patch.set_facecolor('#0d1117')
+            ax_shap.set_facecolor('#0d1117')
+            
+            ax_shap.barh(shap_df['Öznitelik'], shap_df['SHAP_Değeri'], color=colors, height=0.55)
+            ax_shap.axvline(0, color='#8b949e', linestyle='--', linewidth=0.8)
+            
+            ax_shap.tick_params(colors='#c9d1d9', labelsize=9)
+            ax_shap.xaxis.label.set_color('#8b949e')
+            ax_shap.set_xlabel("SHAP Değeri (+ Kırmızı: Phishing Riski | - Mavi: Güvenilirlik)", fontsize=9)
+            
+            for spine in ax_shap.spines.values():
+                spine.set_color('#30363d')
+                
             plt.tight_layout()
             st.pyplot(fig_shap)
 
         with col_shap2:
-            st.markdown("### 🔍 Öznitelik Karar Matrisi")
-            st.write("Aşağıdaki tablo, modelin bu URL için ürettiği **Local SHAP** değerlerinin detaylı listesidir:")
+            st.markdown("###### Öznitelik Karar Matrisi")
             
             matrix_data = []
             for feat, val in sorted(current_shap.items(), key=lambda item: item[1], reverse=True):
                 if val > 0:
-                    status = "🚨 Riski Artıran Faktör"
+                    status = "Riski Artıran"
                 elif val < 0:
-                    status = "✅ Güvenilirliği Destekleyen Faktör"
+                    status = "Güvenli Yönlü"
                 else:
-                    status = "⚪ Nötr Faktör"
-                matrix_data.append({"Öznitelik Metriği": feat, "Karar Yönü": status, "SHAP Skoru": f"{val:+.2f}"})
+                    status = "Nötr"
+                matrix_data.append({"Öznitelik": feat, "Yön": status, "SHAP Skoru": f"{val:+.2f}"})
             
-            st.table(pd.DataFrame(matrix_data))
+            st.dataframe(pd.DataFrame(matrix_data), use_container_width=True, height=270)
     else:
-        st.warning("⚠️ SHAP grafiğini anlık görüntülemek için lütfen önce **Tab 1 (Canlı URL Analiz Paneli)** sekmesinden bir URL analiz ediniz!")
+        st.info("SHAP analizini görüntülemek için lütfen **Canlı URL Analizi** sekmesinden bir sorgulama gerçekleştirin.")
 
 
 # =========================================================
 # TAB 3: MODEL BENCHMARK & PERFORMANS
 # =========================================================
 with tab3:
-    st.subheader("📊 Model Karşılaştırma Benchmark & Başarım Metrikleri")
-    st.markdown("Veri seti üzerinde eğitilen farklı Makine Öğrenmesi (ML) algoritmalarının test kümesindeki başarı skorları aşağıda karşılaştırılmıştır.")
+    st.markdown("##### Model Karşılaştırma Benchmark & Başarım Metrikleri")
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric(label="En Yüksek Doğruluk (Accuracy)", value="%98.4", delta="XGBoost")
+    m1.metric(label="Accuracy (Doğruluk)", value="%98.4", delta="XGBoost")
     m2.metric(label="Precision (Hassasiyet)", value="%98.1", delta="XGBoost")
     m3.metric(label="Recall (Duyarlılık)", value="%98.7", delta="XGBoost")
     m4.metric(label="F1-Score (Denge)", value="%98.4", delta="XGBoost")
 
-    st.write("---")
+    st.markdown("<hr style='border: 0.5px solid #30363d; margin: 20px 0;'>", unsafe_allow_html=True)
 
     col_bench1, col_bench2 = st.columns(2)
 
     with col_bench1:
-        st.markdown("### 🏆 Algoritma Başarım Karşılaştırması")
+        st.markdown("###### Algoritma Başarım Karşılaştırması")
         bench_df = pd.DataFrame({
-            'Model Algoritması': ['XGBoost (Seçilen)', 'LightGBM', 'Random Forest', 'Decision Tree'],
-            'Doğruluk (Accuracy)': [0.984, 0.978, 0.965, 0.921],
+            'Algoritma': ['XGBoost (Seçilen)', 'LightGBM', 'Random Forest', 'Decision Tree'],
+            'Accuracy': [0.984, 0.978, 0.965, 0.921],
             'Precision': [0.981, 0.975, 0.960, 0.915],
             'Recall': [0.987, 0.981, 0.970, 0.928],
             'F1-Score': [0.984, 0.978, 0.965, 0.921]
         })
-        st.dataframe(bench_df.style.highlight_max(axis=0, color='#1e4620'), use_container_width=True)
+        st.dataframe(bench_df, use_container_width=True)
 
     with col_bench2:
-        st.markdown("### 🎯 Confusion Matrix (Karmaşıklık Matrisi - XGBoost)")
+        st.markdown("###### XGBoost Confusion Matrix")
         
         cm = np.array([[4920, 80], [65, 4935]])
-        fig_cm, ax_cm = plt.subplots(figsize=(6, 4))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax_cm,
-                    xticklabels=['Tahmin: Meşru', 'Tahmin: Phishing'],
-                    yticklabels=['Gerçek: Meşru', 'Gerçek: Phishing'])
-        ax_cm.set_title("XGBoost Confusion Matrix")
+        fig_cm, ax_cm = plt.subplots(figsize=(6, 3.5))
+        fig_cm.patch.set_facecolor('#0d1117')
+        ax_cm.set_facecolor('#0d1117')
+        
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax_cm, cbar=False,
+                    xticklabels=['Meşru', 'Phishing'],
+                    yticklabels=['Meşru', 'Phishing'],
+                    annot_kws={"size": 11, "color": "#ffffff"})
+        
+        ax_cm.tick_params(colors='#c9d1d9', labelsize=9)
+        for spine in ax_cm.spines.values():
+            spine.set_color('#30363d')
+            
         plt.tight_layout()
         st.pyplot(fig_cm)
 
-st.caption("Ahmet Yesevi Üniversitesi - Bilgisayar Mühendisliği Yüksek Lisans Dönem Projesi Prototipi")
+# ---------------------------------------------------------
+# Footer
+# ---------------------------------------------------------
+st.markdown("""
+    <div style="margin-top: 40px; border-top: 1px solid #30363d; padding-top: 16px; text-align: center; color: #8b949e; font-size: 12px;">
+        Ahmet Yesevi Üniversitesi - Bilgisayar Mühendisliği Yüksek Lisans Dönem Projesi
+    </div>
+""", unsafe_allow_html=True)
