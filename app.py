@@ -124,7 +124,7 @@ if 'last_shap_values' not in st.session_state:
     st.session_state['last_shap_values'] = None
 
 # ---------------------------------------------------------
-# 1. AKILLI METADATA & DNS KONTROLLÜ WHOIS MOTORU
+# 1. GELİŞMİŞ UZUN SUBDOMAIN UYUMLU METADATA & SSL MOTORU
 # ---------------------------------------------------------
 def parse_to_datetime(date_val):
     if not date_val:
@@ -164,7 +164,7 @@ def fetch_rdap_dates(domain_name):
 
 def get_domain_metadata(url):
     ext = tldextract.extract(url)
-    root_domain = ext.registered_domain
+    root_domain = ext.registered_domain  # Örn: kamuilan.sbb.gov.tr -> sbb.gov.tr
     
     parsed = urllib.parse.urlparse(url if url.startswith(('http://', 'https://')) else f'http://{url}')
     full_hostname = parsed.netloc or parsed.path
@@ -184,6 +184,7 @@ def get_domain_metadata(url):
     if not full_hostname:
         return metadata
 
+    # 1. IP Çözümleme Kontrolü
     ip_found = False
     try:
         ip = socket.gethostbyname(full_hostname)
@@ -201,6 +202,7 @@ def get_domain_metadata(url):
     if not ip_found:
         return metadata
 
+    # 2. RDAP / WHOIS Sorgusu
     c_dt, e_dt = None, None
     target_domain = root_domain if root_domain else clean_hostname
 
@@ -240,15 +242,25 @@ def get_domain_metadata(url):
     if e_dt:
         metadata["expiration_date"] = e_dt.strftime("%Y-%m-%d")
 
-    ssl_hosts_to_try = [full_hostname, clean_hostname]
-    ssl_success = False
+    # 3. 3-KATMANLI GELİŞMİŞ SSL SERTİFİKASI ÇEKİCİ (Uzun Subdomain Uyumlu)
+    ssl_hosts_to_try = [full_hostname, root_domain, f"www.{root_domain}" if root_domain else None]
+    ssl_hosts_to_try = [h for h in ssl_hosts_to_try if h]
+    
+    # Mükerrer olanları sırasını bozmadan temizle
+    seen = set()
+    ssl_hosts_clean = []
+    for h in ssl_hosts_to_try:
+        if h not in seen:
+            seen.add(h)
+            ssl_hosts_clean.append(h)
 
-    for host in ssl_hosts_to_try:
-        if ssl_success or not host:
-            continue
+    ssl_success = False
+    for host in ssl_hosts_clean:
+        if ssl_success:
+            break
         try:
             ctx = ssl.create_default_context()
-            with socket.create_connection((host, 443), timeout=3.0) as sock:
+            with socket.create_connection((host, 443), timeout=2.5) as sock:
                 with ctx.wrap_socket(sock, server_hostname=host) as ssock:
                     cert = ssock.getpeercert()
                     issuer = dict(x[0] for x in cert.get('issuer', []))
@@ -268,7 +280,7 @@ def get_domain_metadata(url):
 
 
 # ---------------------------------------------------------
-# 2. STRICT DİNAMİK RİSK VE CANLI DİNAMİK SHAP HESAPLAYICI
+# 2. DİNAMİK RİSK VE DİNAMİK SHAP HESAPLAYICI
 # ---------------------------------------------------------
 def calculate_shannon_entropy(text):
     if not text:
@@ -319,7 +331,7 @@ def calculate_dynamic_url_risk(url, meta):
             score = round(42.5 + micro_offset, 1)
             local_shap['SSL / HTTPS Güvenliği'] = +0.28
             return score, [
-                ("[ONAYLI] Resmi Kamu / Eğitim Uzonatısı", "Alan adı doğrulanmış kurumsal uzantı taşıyor."),
+                ("[ONAYLI] Resmi Kamu / Eğitim Uzantısı", "Alan adı doğrulanmış kurumsal uzantı taşıyor."),
                 ("[UYARI] SSL Sertifika Doğrulama Hatası", "Güvenli bağlantı (SSL) doğrulanamadı.")
             ], local_shap
         else:
@@ -335,7 +347,7 @@ def calculate_dynamic_url_risk(url, meta):
     if meta["ssl_issuer"] == "Doğrulanmadı" and url_lower.startswith("https://"):
         score += 25.0
         local_shap['SSL / HTTPS Güvenliği'] = +0.25
-        explanations.append(("[UYARI] Doğrulanmayan SSL Sertifikası", "Baglantıda SSL/TLS şifrelemesi doğrulanamadı."))
+        explanations.append(("[UYARI] Doğrulanmayan SSL Sertifikası", "Bağlantıda SSL/TLS şifrelemesi doğrulanamadı."))
 
     critical_brands = ['turkiye', 'edevlet', 'e-devlet', 'garanti', 'ziraat', 'vakifbank', 'isbank', 'akbank', 'gib', 'mhrs']
     for brand in critical_brands:
@@ -389,32 +401,44 @@ def calculate_dynamic_url_risk(url, meta):
 tab1, tab2, tab3 = st.tabs(["Canlı URL Analizi", "XAI & SHAP Katkı Analizi", "Model Başarım & Benchmark"])
 
 # =========================================================
-# TAB 1: CANLI URL ANALİZ PANELİ
+# TAB 1: CANLI URL ANALİZ PANELİ (Tek Tıklama Fixi Entegreli)
 # =========================================================
 with tab1:
     st.markdown("##### URL Sorgulama ve Anlık Tehdit Değerlendirmesi")
     
     col_in1, col_in2 = st.columns([4, 1])
     with col_in1:
+        # Arama kutusunu doğrudan st.session_state'e bağlayıp key verdik
         input_url = st.text_input(
             "Analiz Edilecek URL Adresi",
-            value=st.session_state['last_analyzed_url'],
+            key="url_input_field",
             placeholder="https://example.com veya şüpheli bağlantı...",
             label_visibility="collapsed"
         )
     with col_in2:
         analyze_btn = st.button("URL Analiz Et", use_container_width=True)
     
-    if analyze_btn and input_url:
+    # Butona basıldığında veya Enter yapıldığında doğrudan girilen adresi sorgula
+    if analyze_btn and input_url.strip():
+        url_to_check = input_url.strip()
         with st.spinner("DNS, WHOIS/RDAP ve SSL sertifika verileri doğrulanıyor..."):
-            meta = get_domain_metadata(input_url)
+            meta = get_domain_metadata(url_to_check)
 
-        risk_score, xai_reasons, local_shap = calculate_dynamic_url_risk(input_url, meta)
+        risk_score, xai_reasons, local_shap = calculate_dynamic_url_risk(url_to_check, meta)
         
-        st.session_state['last_analyzed_url'] = input_url
+        # Sonuçları oturum hafızasına yaz
+        st.session_state['last_analyzed_url'] = url_to_check
         st.session_state['last_risk_score'] = risk_score
         st.session_state['last_shap_values'] = local_shap
-        
+        st.session_state['last_meta'] = meta
+        st.session_state['last_reasons'] = xai_reasons
+
+    # Hafızada analiz sonucu varsa doğrudan ve anında ekrana bas (Re-render Fix)
+    if st.session_state['last_risk_score'] is not None:
+        risk_score = st.session_state['last_risk_score']
+        meta = st.session_state['last_meta']
+        xai_reasons = st.session_state['last_reasons']
+
         st.write("")
         col_score, col_status = st.columns([1, 3])
         
