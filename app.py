@@ -133,20 +133,24 @@ st.markdown(f"""
         letter-spacing: 0.5px;
     }}
 
-    /* 🛑 Kırmızı Çizgiyi Kesin Yok Eden Tab CSS Düzeltmesi */
-    .stTabs [data-baseweb="tab-highlight"] {{
+    /* 🛑 Kırmızı Çizgiyi Kökten Silme ve Açık Temada Yazı Okunmama Fixi */
+    div[data-baseweb="tab-highlight"], 
+    div[data-baseweb="tab-border"] {{
         display: none !important;
+        height: 0px !important;
+        background-color: transparent !important;
     }}
     .stTabs [data-baseweb="tab-list"] {{
         gap: 8px;
-        border-bottom: 1px solid {border_color};
+        border-bottom: 1px solid {border_color} !important;
+        background-color: transparent !important;
     }}
     .stTabs [data-baseweb="tab"] {{
         height: 40px;
         padding-left: 16px;
         padding-right: 16px;
-        background-color: transparent;
-        color: {text_secondary};
+        background-color: transparent !important;
+        color: {text_secondary} !important;
         font-weight: 500;
         font-size: 13px;
         border: none !important;
