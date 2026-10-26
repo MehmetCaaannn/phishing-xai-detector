@@ -13,20 +13,20 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # ---------------------------------------------------------
-# Page Configuration
+# Page Configuration & Clean Favicon
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Phishing & Zararlı URL Tespit Sistemi",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # ---------------------------------------------------------
-# Session State Initialize
+# Session State Initialize (Theme & Analysis Storage)
 # ---------------------------------------------------------
-if 'theme' not in st.session_state:
-    st.session_state['theme'] = 'dark'
+if 'app_theme' not in st.session_state:
+    st.session_state['app_theme'] = 'dark'
 
 if 'last_analyzed_url' not in st.session_state:
     st.session_state['last_analyzed_url'] = ""
@@ -40,38 +40,42 @@ if 'last_reasons' not in st.session_state:
     st.session_state['last_reasons'] = None
 
 # ---------------------------------------------------------
-# Dynamic Theme Engine & Active Tab Fix
+# Dynamic Theme Engine & CSS Fixes
 # ---------------------------------------------------------
-is_dark = st.session_state['theme'] == 'dark'
+is_dark = (st.session_state['app_theme'] == 'dark')
 
 bg_main = "#0d1117" if is_dark else "#f6f8fa"
 bg_card = "#161b22" if is_dark else "#ffffff"
 border_color = "#30363d" if is_dark else "#d0d7de"
 text_primary = "#f0f6fc" if is_dark else "#1f2328"
-text_secondary = "#8b949e" if is_dark else "#656d76"
+text_secondary = "#8b949e" if is_dark else "#57606a"
 btn_bg = "#238636" if is_dark else "#2da44e"
 btn_hover = "#2ea043" if is_dark else "#2c974b"
+accent_blue = "#58a6ff" if is_dark else "#0969da"
 
 st.markdown(f"""
     <style>
-    /* Global Page Styling */
+    /* Global Background & Font Fix */
+    .stApp {{
+        background-color: {bg_main} !important;
+        color: {text_primary} !important;
+    }}
     .main {{
-        background-color: {bg_main};
+        background-color: {bg_main} !important;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }}
     
-    /* Header Container */
+    /* Header Box Container */
     .header-box {{
-        padding: 24px 30px;
-        background: {bg_card};
+        padding: 20px 24px;
+        background-color: {bg_card};
         border: 1px solid {border_color};
-        border-radius: 10px;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        border-radius: 8px;
+        margin-bottom: 20px;
     }}
     .header-title {{
         color: {text_primary};
-        font-size: 26px;
+        font-size: 24px;
         font-weight: 700;
         letter-spacing: -0.5px;
         margin-bottom: 4px;
@@ -88,9 +92,9 @@ st.markdown(f"""
         background-color: rgba(248, 81, 73, 0.15);
         color: #f85149;
         border: 1px solid rgba(248, 81, 73, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 13px;
+        padding: 5px 12px;
+        border-radius: 16px;
+        font-size: 12px;
         font-weight: 600;
         display: inline-block;
     }}
@@ -98,9 +102,9 @@ st.markdown(f"""
         background-color: rgba(210, 153, 34, 0.15);
         color: #d29922;
         border: 1px solid rgba(210, 153, 34, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 13px;
+        padding: 5px 12px;
+        border-radius: 16px;
+        font-size: 12px;
         font-weight: 600;
         display: inline-block;
     }}
@@ -108,73 +112,82 @@ st.markdown(f"""
         background-color: rgba(46, 160, 67, 0.15);
         color: #3fb950;
         border: 1px solid rgba(46, 160, 67, 0.4);
-        padding: 6px 14px;
-        border-radius: 20px;
-        font-size: 13px;
+        padding: 5px 12px;
+        border-radius: 16px;
+        font-size: 12px;
         font-weight: 600;
         display: inline-block;
     }}
 
-    /* Metric Override */
+    /* Metric Card Styling */
     div[data-testid="stMetricValue"] {{
-        font-size: 18px !important;
+        font-size: 17px !important;
         font-weight: 600 !important;
-        color: #0969da !important;
+        color: {accent_blue} !important;
     }}
     div[data-testid="stMetricLabel"] {{
-        font-size: 12px !important;
+        font-size: 11px !important;
         color: {text_secondary} !important;
         font-weight: 500 !important;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }}
 
-    /* Custom Streamlit Tabs (Kırmızı Çizgi Düzeltmesi) */
+    /* 🛑 Kırmızı Çizgiyi Kesin Yok Eden Tab CSS Düzeltmesi */
     .stTabs [data-baseweb="tab-highlight"] {{
-        background-color: #0969da !important;
+        display: none !important;
     }}
     .stTabs [data-baseweb="tab-list"] {{
-        gap: 6px;
+        gap: 8px;
         border-bottom: 1px solid {border_color};
     }}
     .stTabs [data-baseweb="tab"] {{
-        height: 42px;
-        padding-left: 18px;
-        padding-right: 18px;
+        height: 40px;
+        padding-left: 16px;
+        padding-right: 16px;
         background-color: transparent;
-        border-radius: 6px 6px 0px 0px;
         color: {text_secondary};
         font-weight: 500;
         font-size: 13px;
+        border: none !important;
         border-bottom: 2px solid transparent !important;
     }}
     .stTabs [aria-selected="true"] {{
-        background-color: {bg_card} !important;
-        color: #0969da !important;
-        border-bottom: 2px solid #0969da !important;
+        background-color: transparent !important;
+        color: {accent_blue} !important;
+        border-bottom: 2px solid {accent_blue} !important;
+        font-weight: 600 !important;
     }}
-    
-    /* Action Button Styling */
+
+    /* Primary Action Buttons */
     .stButton > button {{
         background-color: {btn_bg};
-        color: #ffffff;
+        color: #ffffff !important;
         font-weight: 600;
         border: 1px solid rgba(240, 246, 252, 0.1);
         border-radius: 6px;
-        height: 44px;
+        height: 40px;
         transition: all 0.2s ease;
     }}
     .stButton > button:hover {{
         background-color: {btn_hover};
-        border-color: {text_secondary};
+        border-color: {border_color};
     }}
-    
-    /* Section Titles */
+
+    /* Input Field Theme Fix */
+    .stTextInput > div > div > input {{
+        background-color: {bg_card} !important;
+        color: {text_primary} !important;
+        border: 1px solid {border_color} !important;
+        border-radius: 6px !important;
+    }}
+
+    /* Section Headers */
     .section-header {{
         color: {text_primary};
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 600;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         letter-spacing: 0.3px;
         text-transform: uppercase;
     }}
@@ -182,7 +195,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# Header & Theme Toggle Switcher
+# Header Area & Sleek Embedded Theme Switcher
 # ---------------------------------------------------------
 col_head1, col_head2 = st.columns([5, 1])
 
@@ -198,11 +211,11 @@ with col_head2:
     st.write("")
     if is_dark:
         if st.button("☀️ Açık Tema", use_container_width=True):
-            st.session_state['theme'] = 'light'
+            st.session_state['app_theme'] = 'light'
             st.rerun()
     else:
         if st.button("🌙 Koyu Tema", use_container_width=True):
-            st.session_state['theme'] = 'dark'
+            st.session_state['app_theme'] = 'dark'
             st.rerun()
 
 # ---------------------------------------------------------
@@ -555,7 +568,7 @@ with tab1:
         
         reasons_html = f'<div style="background-color: {bg_card}; border: 1px solid {border_color}; border-radius: 8px; padding: 16px;">'
         for title, desc in xai_reasons:
-            reasons_html += f'<div style="margin-bottom: 8px; font-size: 13px; color: {text_primary};"><span style="color: #0969da; font-weight: 600;">{title}:</span> {desc}</div>'
+            reasons_html += f'<div style="margin-bottom: 8px; font-size: 13px; color: {text_primary};"><span style="color: {accent_blue}; font-weight: 600;">{title}:</span> {desc}</div>'
         reasons_html += '</div>'
         st.markdown(reasons_html, unsafe_allow_html=True)
 
@@ -595,7 +608,7 @@ with tab2:
     if current_url and current_shap:
         st.markdown(f"""
             <div style="background-color: {bg_card}; padding: 12px 16px; border-radius: 6px; border: 1px solid {border_color}; margin-bottom: 20px; font-size: 13px; color: {text_primary};">
-                <b>İncelenen Hedef:</b> <code>{current_url}</code> &nbsp;|&nbsp; <b>Model Risk Skoru:</b> <span style="color:#0969da; font-weight:600;">%{current_risk}</span>
+                <b>İncelenen Hedef:</b> <code>{current_url}</code> &nbsp;|&nbsp; <b>Model Risk Skoru:</b> <span style="color:{accent_blue}; font-weight:600;">%{current_risk}</span>
             </div>
         """, unsafe_allow_html=True)
 
