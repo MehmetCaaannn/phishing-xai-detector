@@ -653,35 +653,35 @@ with tab3:
         st.dataframe(bench_df, use_container_width=True)
 
     with col_bench2:
-    st.markdown('<div class="section-header">XGBoost Confusion Matrix</div>', unsafe_allow_html=True)
-    
-    cm = np.array([[4920, 80], [65, 4935]])
-    fig_cm, ax_cm = plt.subplots(figsize=(6, 3.5))
-    fig_cm.patch.set_facecolor('#161b22')
-    ax_cm.set_facecolor('#161b22')
-    
-    # Seaborn Heatmap (annot=False yapıp yazıları dinamik renkle biz ekliyoruz)
-    sns.heatmap(cm, annot=False, cmap='Blues', ax=ax_cm, cbar=False,
-                xticklabels=['Meşru', 'Phishing'],
-                yticklabels=['Meşru', 'Phishing'])
-    
-    # DİNAMİK YAZI RENKLENDİRMESİ (AÇIK KUTULARA SİYAH, KOYU KUTULARA BEYAZ)
-    thresh = cm.max() / 2.0
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            val = cm[i, j]
-            # Değer yüksekse (koyu zemin) BEYAZ, düşükse (açık zemin) SİYAH font
-            text_color = "#f0f6fc" if val > thresh else "#161b22"
-            ax_cm.text(j + 0.5, i + 0.5, f"{val}",
-                       ha="center", va="center",
-                       color=text_color, fontsize=11, fontweight='bold')
-    
-    ax_cm.tick_params(colors='#f0f6fc', labelsize=9)
-    for spine in ax_cm.spines.values():
-        spine.set_color('#30363d')
+        st.markdown('<div class="section-header">XGBoost Confusion Matrix</div>', unsafe_allow_html=True)
         
-    plt.tight_layout()
-    st.pyplot(fig_cm)
+        cm = np.array([[4920, 80], [65, 4935]])
+        fig_cm, ax_cm = plt.subplots(figsize=(6, 3.5))
+        fig_cm.patch.set_facecolor('#161b22')
+        ax_cm.set_facecolor('#161b22')
+        
+        # Seaborn Heatmap (annot=False yapıp yazıları dinamik renkle biz ekliyoruz)
+        sns.heatmap(cm, annot=False, cmap='Blues', ax=ax_cm, cbar=False,
+                    xticklabels=['Meşru', 'Phishing'],
+                    yticklabels=['Meşru', 'Phishing'])
+        
+        # DİNAMİK YAZI RENKLENDİRMESİ (AÇIK KUTULARA SİYAH, KOYU KUTULARA BEYAZ)
+        thresh = cm.max() / 2.0
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                val = cm[i, j]
+                # Değer yüksekse (koyu zemin) BEYAZ, düşükse (açık zemin) SİYAH font
+                text_color = "#f0f6fc" if val > thresh else "#161b22"
+                ax_cm.text(j + 0.5, i + 0.5, f"{val}",
+                           ha="center", va="center",
+                           color=text_color, fontsize=11, fontweight='bold')
+        
+        ax_cm.tick_params(colors='#f0f6fc', labelsize=9)
+        for spine in ax_cm.spines.values():
+            spine.set_color('#30363d')
+            
+        plt.tight_layout()
+        st.pyplot(fig_cm)
 
 # ---------------------------------------------------------
 # Footer
